@@ -1,0 +1,28 @@
+Crear EV
+python -m venv .venv# python -m venv .venv
+
+Activar EV
+.venv\Scripts\activate
+
+Ejecutar
+python main.py
+
+A Supabase entro con la cuenta de Github
+
+🚀 1️⃣ Flujo de trabajo habitual
+
+Cada vez que abras VS Code para trabajar:
+
+1️⃣ Abrir el proyecto raíz comparapp/
+2️⃣ Abrir dos terminales:
+
+Terminal 1 → backend\app → activar .\.venv\Scripts\Activate.ps1 y luego ejecutar:  uvicorn main:app --reload
+
+Terminal 2 → frontend\nuxt → npm run dev
+3️⃣ Abrí tu navegador:
+
+http://127.0.0.1:8000/docs
+ (backend)
+
+http://localhost:3000
+ (frontend)

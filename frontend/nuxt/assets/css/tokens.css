@@ -1,0 +1,67 @@
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS — ComparApp
+   Basado en referencia Vitaria (glass + warm dark)
+   ═══════════════════════════════════════════════ */
+
+:root {
+  /* ─── Backgrounds ─── */
+  --app-bg-deep: #0a0a0f;
+  --app-bg-card: rgba(255, 255, 255, 0.03);
+  --app-bg-card-hover: rgba(255, 255, 255, 0.06);
+  --app-bg-input: rgba(255, 255, 255, 0.03);
+  --app-bg-input-focus: rgba(255, 255, 255, 0.05);
+
+  /* ─── Accents ─── */
+  --app-gold: #e8c4a0;
+  --app-gold-soft: rgba(232, 196, 160, 0.12);
+  --app-blue: #60a5fa;
+  --app-amber: #fbbf24;
+  --app-emerald: #34d399;
+  --app-violet: #a78bfa;
+  --app-rose: #fb7185;
+  --app-orange: #fb923c;
+  --app-slate: #94a3b8;
+  --app-green-price: #4ade80;
+
+  /* ─── Text ─── */
+  --app-text-primary: #f5f0eb;
+  --app-text-secondary: rgba(245, 240, 235, 0.6);
+  --app-text-muted: rgba(245, 240, 235, 0.35);
+
+  /* ─── Borders ─── */
+  --app-border-subtle: rgba(255, 255, 255, 0.08);
+  --app-border-glow: rgba(232, 196, 160, 0.25);
+
+  /* ─── Shadows ─── */
+  --app-shadow-glow: 0 0 20px rgba(232, 196, 160, 0.12);
+  --app-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.2);
+  --app-shadow-input-focus: 0 0 0 4px rgba(232, 196, 160, 0.05);
+
+  /* ─── Radii ─── */
+  --app-radius-sm: 12px;
+  --app-radius-md: 16px;
+  --app-radius-lg: 20px;
+  --app-radius-xl: 24px;
+  --app-radius-full: 9999px;
+
+  /* ─── Spacing ─── */
+  --app-space-xs: 0.5rem;
+  --app-space-sm: 0.75rem;
+  --app-space-md: 1rem;
+  --app-space-lg: 1.5rem;
+  --app-space-xl: 2rem;
+
+  /* ─── Typography ─── */
+  --app-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-text-xs: 0.75rem;
+  --app-text-sm: 0.82rem;
+  --app-text-base: 0.95rem;
+  --app-text-lg: 1.1rem;
+  --app-text-xl: 1.5rem;
+  --app-text-2xl: 1.75rem;
+
+  /* ─── Transitions ─── */
+  --app-transition-fast: 0.2s ease;
+  --app-transition-base: 0.25s ease;
+  --app-transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
