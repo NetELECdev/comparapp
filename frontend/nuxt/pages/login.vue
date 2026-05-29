@@ -1,5 +1,5 @@
 <template>
-  <div class="app-page">
+  <div class="login-wrapper">  <!-- ← CAMBIO: class="app-page" → class="login-wrapper" -->
     <main class="login-content">
       <!-- LOGO -->
       <div class="logo-section animate-fade-in-up">
@@ -158,7 +158,13 @@ async function login() {
   try {
     const response = await $fetch<LoginResponse>(`${config.public.apiBase}/login`, {
       method: 'POST',
-      query: { email: email.value, password: password.value }
+      headers: {
+    'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ 
+      email: email.value, 
+      password: password.value 
+    })
     })
 
     if (response?.message === 'Login exitoso' && response?.user) {
@@ -184,6 +190,8 @@ async function login() {
       }
 
       localStorage.setItem('comparapp_user', JSON.stringify(userData))
+      localStorage.setItem('comparapp_user', JSON.stringify(userData))
+      console.log('Usuario guardado:', userData)
       await navigateTo('/dashboard')
     } else {
       error.value = response?.message || 'Error desconocido en el login'
@@ -238,11 +246,21 @@ function handleError(err: any) {
 </script>
 
 <style scoped>
-/* ─── LOGIN — Design System Vitaria ─── */
+/* ─── LOGIN WRAPPER — contenedor raíz transparente ─── */
+/* ← CAMBIO: reemplaza .app-page, sin fondo propio para dejar ver el fondo global de app.vue */
+.login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Sin background — el fondo lo provee #app-background en app.vue */
+}
 
+/* ─── LOGIN CONTENT ─── */
 .login-content {
   position: relative;
-  z-index: 2;
+  /* ← CAMBIO: eliminado z-index: 2, no es necesario con #app-background en z-index: -1 */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -300,8 +318,6 @@ function handleError(err: any) {
   margin: 0 0 0.5rem;
   letter-spacing: -0.02em;
 }
-
-
 
 /* ─── FORMULARIO ─── */
 .login-form {

@@ -1,67 +1,148 @@
-/* ═══════════════════════════════════════════════
-   DESIGN TOKENS — ComparApp
-   Basado en referencia Vitaria (glass + warm dark)
-   ═══════════════════════════════════════════════ */
+/*
+ * assets/css/tokens.css
+ * Variables de diseño para ComparApp — dark mode (base) + light mode.
+ * REEMPLAZA tu tokens.css actual con este contenido.
+ */
 
+/* ══════════════════════════════════════════
+   TEMA OSCURO (base / default)
+══════════════════════════════════════════ */
+:root,
+[data-tema="dark"] {
+  /* Fondos */
+  --bg-deep:        #0a0a0f;
+  --bg-card:        rgba(255, 255, 255, 0.03);
+  --bg-card-hover:  rgba(255, 255, 255, 0.06);
+  --bg-input:       rgba(255, 255, 255, 0.04);
+  --bg-overlay:     rgba(0, 0, 0, 0.6);
+
+  /* Bordes */
+  --border-subtle:  rgba(255, 255, 255, 0.08);
+  --border-glow:    rgba(232, 196, 160, 0.25);
+  --border-focus:   rgba(232, 196, 160, 0.4);
+
+  /* Textos */
+  --text-primary:   #f5f0eb;
+  --text-secondary: rgba(245, 240, 235, 0.6);
+  --text-muted:     rgba(245, 240, 235, 0.35);
+  --text-inverse:   #0a0a0f;
+
+  /* Acentos */
+  --accent-gold:    #e8c4a0;
+  --accent-gold-dim: rgba(232, 196, 160, 0.15);
+  --accent-blue:    #60a5fa;
+  --accent-amber:   #fbbf24;
+  --accent-emerald: #34d399;
+  --accent-rose:    #fb7185;
+  --accent-violet:  #a78bfa;
+
+  /* Sombras */
+  --shadow-card:    0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-modal:   0 24px 64px rgba(0, 0, 0, 0.5);
+
+  /* Toggle tema */
+  --toggle-bg:      rgba(255, 255, 255, 0.08);
+  --toggle-icon:    rgba(245, 240, 235, 0.6);
+
+  /* Fondo dinámico */
+  --bg-fondo-opacity: 1;
+}
+
+/* ══════════════════════════════════════════
+   TEMA CLARO
+══════════════════════════════════════════ */
+[data-tema="light"] {
+  /* Fondos */
+  --bg-deep:        #f0ece8;
+  --bg-card:        rgba(255, 255, 255, 0.75);
+  --bg-card-hover:  rgba(255, 255, 255, 0.92);
+  --bg-input:       rgba(255, 255, 255, 0.8);
+  --bg-overlay:     rgba(0, 0, 0, 0.35);
+
+  /* Bordes */
+  --border-subtle:  rgba(0, 0, 0, 0.08);
+  --border-glow:    rgba(180, 120, 60, 0.3);
+  --border-focus:   rgba(180, 120, 60, 0.5);
+
+  /* Textos */
+  --text-primary:   #1a1512;
+  --text-secondary: rgba(26, 21, 18, 0.65);
+  --text-muted:     rgba(26, 21, 18, 0.38);
+  --text-inverse:   #f5f0eb;
+
+  /* Acentos (ligeramente más saturados para luz) */
+  --accent-gold:    #b87333;
+  --accent-gold-dim: rgba(184, 115, 51, 0.12);
+  --accent-blue:    #2563eb;
+  --accent-amber:   #d97706;
+  --accent-emerald: #059669;
+  --accent-rose:    #e11d48;
+  --accent-violet:  #7c3aed;
+
+  /* Sombras */
+  --shadow-card:    0 2px 16px rgba(0, 0, 0, 0.08);
+  --shadow-modal:   0 16px 48px rgba(0, 0, 0, 0.2);
+
+  /* Toggle tema */
+  --toggle-bg:      rgba(0, 0, 0, 0.06);
+  --toggle-icon:    rgba(26, 21, 18, 0.65);
+
+  /* Fondo dinámico — más suave en light mode */
+  --bg-fondo-opacity: 0.4;
+}
+
+/* ══════════════════════════════════════════
+   RADIOS Y ESPACIADO (invariante al tema)
+══════════════════════════════════════════ */
 :root {
-  /* ─── Backgrounds ─── */
-  --app-bg-deep: #0a0a0f;
-  --app-bg-card: rgba(255, 255, 255, 0.03);
-  --app-bg-card-hover: rgba(255, 255, 255, 0.06);
-  --app-bg-input: rgba(255, 255, 255, 0.03);
-  --app-bg-input-focus: rgba(255, 255, 255, 0.05);
+  --radius-xs:  8px;
+  --radius-sm:  12px;
+  --radius-md:  16px;
+  --radius-lg:  20px;
+  --radius-xl:  24px;
+  --radius-2xl: 32px;
+}
 
-  /* ─── Accents ─── */
-  --app-gold: #e8c4a0;
-  --app-gold-soft: rgba(232, 196, 160, 0.12);
-  --app-blue: #60a5fa;
-  --app-amber: #fbbf24;
-  --app-emerald: #34d399;
-  --app-violet: #a78bfa;
-  --app-rose: #fb7185;
-  --app-orange: #fb923c;
-  --app-slate: #94a3b8;
-  --app-green-price: #4ade80;
+/* ══════════════════════════════════════════
+   TRANSICIÓN SUAVE AL CAMBIAR TEMA
+══════════════════════════════════════════ */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.35s ease;
+}
 
-  /* ─── Text ─── */
-  --app-text-primary: #f5f0eb;
-  --app-text-secondary: rgba(245, 240, 235, 0.6);
-  --app-text-muted: rgba(245, 240, 235, 0.35);
+/* Excluir transiciones en elementos que no deben animarse */
+img,
+svg,
+video,
+canvas,
+input[type="range"] {
+  transition: none;
+}
 
-  /* ─── Borders ─── */
-  --app-border-subtle: rgba(255, 255, 255, 0.08);
-  --app-border-glow: rgba(232, 196, 160, 0.25);
-
-  /* ─── Shadows ─── */
-  --app-shadow-glow: 0 0 20px rgba(232, 196, 160, 0.12);
-  --app-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.2);
-  --app-shadow-input-focus: 0 0 0 4px rgba(232, 196, 160, 0.05);
-
-  /* ─── Radii ─── */
-  --app-radius-sm: 12px;
-  --app-radius-md: 16px;
-  --app-radius-lg: 20px;
-  --app-radius-xl: 24px;
-  --app-radius-full: 9999px;
-
-  /* ─── Spacing ─── */
-  --app-space-xs: 0.5rem;
-  --app-space-sm: 0.75rem;
-  --app-space-md: 1rem;
-  --app-space-lg: 1.5rem;
-  --app-space-xl: 2rem;
-
-  /* ─── Typography ─── */
-  --app-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --app-text-xs: 0.75rem;
-  --app-text-sm: 0.82rem;
-  --app-text-base: 0.95rem;
-  --app-text-lg: 1.1rem;
-  --app-text-xl: 1.5rem;
-  --app-text-2xl: 1.75rem;
-
-  /* ─── Transitions ─── */
-  --app-transition-fast: 0.2s ease;
-  --app-transition-base: 0.25s ease;
-  --app-transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* ══════════════════════════════════════════
+   ALIAS --app-* (compatibilidad con login y
+   otros componentes que usan el prefijo viejo)
+══════════════════════════════════════════ */
+:root,
+[data-tema="dark"],
+[data-tema="light"] {
+  --app-text-primary:    var(--text-primary);
+  --app-text-secondary:  var(--text-secondary);
+  --app-text-muted:      var(--text-muted);
+  --app-gold:            var(--accent-gold);
+  --app-border-subtle:   var(--border-subtle);
+  --app-border-glow:     var(--border-glow);
+  --app-radius-sm:       var(--radius-sm);
+  --app-radius-md:       var(--radius-md);
+  --app-radius-lg:       var(--radius-lg);
+  --app-shadow-glow:     0 0 20px rgba(232, 196, 160, 0.15);
+  --app-bg-card:         var(--bg-card);
+  --app-bg-input:        var(--bg-input);
+  --app-bg-deep:         var(--bg-deep);        
 }

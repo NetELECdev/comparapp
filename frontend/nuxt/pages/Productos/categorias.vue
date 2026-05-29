@@ -30,7 +30,7 @@
         <NuxtLink
           v-for="(cat, index) in categoriasOrdenadas"
           :key="cat.id_cate"
-          :to="`/Productos/lista?categoria=${encodeURIComponent(cat.nombre_cate)}`"
+          :to="`/productos/lista?categoria=${encodeURIComponent(cat.nombre_cate)}`"
           class="categoria-card"
           :class="`stagger-${Math.min(index + 2, 8)}`"
         >
@@ -65,7 +65,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRuntimeConfig, navigateTo } from '#app'
+import { navigateTo } from '#app'
 
 interface Categoria {
   id_cate: string
@@ -75,7 +75,6 @@ interface Categoria {
   cantidad_prod: number
 }
 
-const config = useRuntimeConfig()
 const loading = ref(true)
 const categorias = ref<Categoria[]>([])
 
@@ -140,10 +139,9 @@ const categoriasOrdenadas = computed(() => {
 onMounted(async () => {
   try {
     // Intentar cargar desde API
-    const res = await $fetch<Categoria[]>(
-      `${config.public.apiBase}/categorias`
-    )
-    categorias.value = res || []
+    const { api } = useApi()
+    const res = await api<{ count: number; results: Categoria[] }>('/categorias')
+    categorias.value = res.results || []
   } catch (err) {
     console.error('Error cargando categorías:', err)
     // Fallback: cargar desde localStorage si existe

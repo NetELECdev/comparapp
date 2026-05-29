@@ -1,5 +1,6 @@
 # compara/database/database_manager.py
 
+import os
 from typing import Tuple, List, Dict, Optional
 
 from datetime import datetime
@@ -10,13 +11,50 @@ from supabase_config import SupabaseConfig
 import time
 from supabase.lib.client_options import ClientOptions
 
+import struct
+import binascii
+
+
 class DatabaseManager:
     def __init__(self):
         self.session = requests.Session()
         self.current_user = None
         url = SupabaseConfig.get_url()
+        key = os.getenv('SUPABASE_SERVICE_KEY', SupabaseConfig.get_anon_key()) # Usar service key para el backend (bypass RLS)
         key = SupabaseConfig.get_anon_key()
         self.supabase = create_client(url, key)
+
+
+
+    def _parse_wkb_point(self, wkb_hex: str) -> dict:
+        try:
+            raw = binascii.unhexlify(wkb_hex)
+            byte_order = raw[0]
+            if byte_order == 1:
+                wkb_type = struct.unpack_from('<I', raw, 1)[0]
+                has_srid = bool(wkb_type & 0x20000000)
+                offset = 9 if has_srid else 5
+                lng, lat = struct.unpack_from('<dd', raw, offset)
+            else:
+                wkb_type = struct.unpack_from('>I', raw, 1)[0]
+                has_srid = bool(wkb_type & 0x20000000)
+                offset = 9 if has_srid else 5
+                lng, lat = struct.unpack_from('>dd', raw, offset)
+            return {'lat': lat, 'lng': lng}
+        except Exception as e:
+            print(f"Error parseando WKB: {e}")
+            return {'lat': None, 'lng': None}
+
+    def _enrich_proveedores(self, proveedores: list) -> list:
+        for p in proveedores:
+            if p.get('ubicacion_provee'):
+                coords = self._parse_wkb_point(p['ubicacion_provee'])
+                p['lat'] = coords['lat']
+                p['lng'] = coords['lng']
+            else:
+                p['lat'] = None
+                p['lng'] = None
+        return proveedores
 
     def _test_connection_simple(self):
         """Test de conexión básico"""
@@ -266,33 +304,232 @@ class DatabaseManager:
     def get_current_user(self):
         return self.current_user
 
+
+# ---------------------------------------------------
+# Normalización de nombres de productos para historial de precios
+# ---------------------------------------------------
+
+    def _normalize_product_name(self, nombre: str) -> str:
+        """
+        Normaliza un nombre de producto para comparación de duplicados.
+        """
+        import re
+        
+        if not nombre:
+            return ""
+        
+        normalized = nombre.lower().strip()
+        
+        stopwords = {
+            'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
+            'por', 'para', 'con', 'sin', 'sobre', 'entre', 'hacia', 'desde',
+            'y', 'o', 'e', 'u'
+        }
+        
+        words = normalized.split()
+        filtered_words = [w for w in words if w not in stopwords]
+        normalized = ' '.join(filtered_words)
+        normalized = re.sub(r'[^a-z0-9]', '', normalized)
+        
+        return normalized
+
+
+# ---------------------------------------------------
+# REEMPLAZOS ultimos
+# ---------------------------------------------------
+
     def get_user_role(self) -> str:
-        if self.current_user and 'user_metadata' in self.current_user:
-            return self.current_user['user_metadata'].get('rol', 'user')
-        return 'user'
+        if self.current_user:
+            # Primero chequear rol_user directo
+            if 'rol_user' in self.current_user:
+                return self.current_user['rol_user']
+            # Luego chequear en user_metadata
+            if 'user_metadata' in self.current_user:
+                return self.current_user['user_metadata'].get('rol', 'usuario')
+            # Finalmente chequear en app_metadata (Supabase Auth)
+            if 'app_metadata' in self.current_user:
+                return self.current_user['app_metadata'].get('rol', 'usuario')
+        return 'usuario'
 
     def is_admin(self) -> bool:
-        return self.get_user_role() == 'admin'
+        role = self.get_user_role()
+        print(f"DEBUG is_admin: current_user={self.current_user is not None}, rol={role}")
+        return role == 'admin'
 
     # ==================== PRODUCTOS ====================
 
     def create_product(self, product_data: dict) -> Tuple[bool, str]:
+        """
+        Crea un producto nuevo o actualiza el precio si ya existe
+        uno con nombre similar + mismo proveedor.
+        """
         if not self.is_admin():
             return False, "Permisos insuficientes"
+        
         try:
-            product_data['fecha_prod'] = 'now()'
-            response = self.supabase.table('producto').insert(product_data).execute()
-            return (True, "Producto creado") if response.data else (False, "Error al crear producto")
+            from datetime import datetime
+            
+            nombre = product_data.get('nombre_prod', '').strip()
+            proveedor = product_data.get('provee_prod', '').strip()
+            nuevo_precio = product_data.get('precio_prod')
+            
+            if not nombre or not proveedor:
+                return False, "nombre_prod y provee_prod son requeridos"
+            
+            # Normalizar nombre para búsqueda de duplicados
+            nombre_normalizado = self._normalize_product_name(nombre)
+            
+            if not nombre_normalizado:
+                return False, "nombre_prod no válido después de normalizar"
+            
+            # Buscar TODOS los productos activos del mismo proveedor
+            response = self.supabase.table('producto')\
+                .select('id_prod, nombre_prod, precio_prod, provee_prod, fecha_prod, describe_prod, unidad_prod, cantidad_prod, marca_prod, imagen_prod, cate_id, cate_prod')\
+                .eq('provee_prod', proveedor)\
+                .eq('activo_prod', True)\
+                .execute()
+            
+            ahora = datetime.now().isoformat()
+            
+            # Buscar coincidencia por nombre normalizado
+            producto_existente = None
+            for prod in (response.data or []):
+                if self._normalize_product_name(prod.get('nombre_prod', '')) == nombre_normalizado:
+                    producto_existente = prod
+                    break
+            
+            if producto_existente:
+                # CASO: Duplicado detectado → Actualizar
+                product_id = producto_existente['id_prod']
+                precio_anterior = producto_existente.get('precio_prod')
+                nombre_existente = producto_existente.get('nombre_prod', '')
+                
+                print(f"🔍 Duplicado detectado: '{nombre}' coincide con '{nombre_existente}'")
+                
+                # Guardar precio anterior en historial
+                if precio_anterior is not None and precio_anterior != nuevo_precio:
+                    try:
+                        self.supabase.table('historial_precios').insert({
+                            'id_prod': product_id,
+                            'precio': precio_anterior,
+                            'fecha_registro': ahora
+                        }).execute()
+                        print(f"💾 Precio histórico guardado: {precio_anterior} → {nuevo_precio}")
+                    except Exception as hist_err:
+                        print(f"⚠️ Error guardando historial: {hist_err}")
+                
+                # Quedarse con el nombre más largo/descriptivo
+                nombre_final = nombre_existente
+                if len(nombre.strip()) > len(nombre_existente.strip()):
+                    nombre_final = nombre.strip()
+                    print(f"📝 Nombre actualizado: '{nombre_existente}' → '{nombre_final}'")
+                
+                update_payload = {
+                    'precio_prod': nuevo_precio,
+                    'fecha_prod': ahora,
+                    'activo_prod': True,
+                    'nombre_prod': nombre_final
+                }
+                
+                # Campos opcionales: actualizar solo si son mejores
+                for campo in ['describe_prod', 'unidad_prod', 'cantidad_prod', 'marca_prod', 'imagen_prod', 'cate_id', 'cate_prod']:
+                    if campo in product_data and product_data[campo] is not None:
+                        valor_nuevo = product_data[campo]
+                        valor_existente = producto_existente.get(campo)
+                        if isinstance(valor_nuevo, str) and isinstance(valor_existente, str):
+                            if len(valor_nuevo.strip()) > len(valor_existente.strip()):
+                                update_payload[campo] = valor_nuevo
+                        else:
+                            update_payload[campo] = valor_nuevo
+                
+                response = self.supabase.table('producto')\
+                    .update(update_payload)\
+                    .eq('id_prod', product_id)\
+                    .execute()
+                
+                if response.data:
+                    return True, f"Producto actualizado (precio anterior: ${precio_anterior})"
+                return False, "Error al actualizar producto existente"
+            
+            else:
+                # CASO: Producto nuevo → Insertar
+                product_data['fecha_prod'] = ahora
+                if 'activo_prod' not in product_data:
+                    product_data['activo_prod'] = True
+                
+                response = self.supabase.table('producto').insert(product_data).execute()
+                
+                if response.data and len(response.data) > 0:
+                    new_id = response.data[0]['id_prod']
+                    if nuevo_precio is not None:
+                        try:
+                            self.supabase.table('historial_precios').insert({
+                                'id_prod': new_id,
+                                'precio': nuevo_precio,
+                                'fecha_registro': ahora
+                            }).execute()
+                        except Exception:
+                            pass
+                    return True, "Producto creado exitosamente"
+                return False, "Error al crear producto"
+                
         except Exception as e:
+            print(f"❌ Error en create_product: {e}")
             return False, str(e)
 
     def update_product(self, product_id: str, product_data: dict) -> Tuple[bool, str]:
+        """
+        Actualiza un producto. Si cambia el precio, guarda automáticamente
+        el precio anterior en historial_precios.
+        """
         if not self.is_admin():
             return False, "Permisos insuficientes"
+        
         try:
-            response = self.supabase.table('producto').update(product_data).eq('id_prod', product_id).execute()
+            from datetime import datetime
+            
+            if 'precio_prod' in product_data:
+                try:
+                    actual_response = self.supabase.table("producto")\
+                        .select("precio_prod, nombre_prod")\
+                        .eq("id_prod", product_id)\
+                        .limit(1)\
+                        .execute()
+                    
+                    if actual_response.data and len(actual_response.data) > 0:
+                        precio_anterior = actual_response.data[0].get("precio_prod")
+                        nombre_prod = actual_response.data[0].get("nombre_prod", "")
+                        nuevo_precio = product_data['precio_prod']
+                        
+                        if precio_anterior is not None and precio_anterior != nuevo_precio:
+                            self.supabase.table("historial_precios").insert({
+                                "id_prod": product_id,
+                                "precio": precio_anterior,
+                                "fecha_registro": datetime.now().isoformat()
+                            }).execute()
+                            print(f"💾 Precio histórico guardado: ${precio_anterior} → ${nuevo_precio} para '{nombre_prod}'")
+                
+                except Exception as hist_err:
+                    print(f"⚠️ Error guardando historial: {hist_err}")
+            
+            product_data['fecha_prod'] = datetime.now().isoformat()
+            
+            response = self.supabase.table('producto')\
+                .update(product_data)\
+                .eq('id_prod', product_id)\
+                .execute()
+            
+            # ✅ NUEVO: Verificar alertas
+            try:
+                nuevo_precio = float(product_data['precio_prod'])
+                self._verificar_alertas(product_id, nuevo_precio)
+            except Exception as e:
+                print(f"⚠️ Error en verificación de alertas: {e}")
+
             return (True, "Producto actualizado") if response.data else (False, "Error al actualizar")
+        
         except Exception as e:
+            print(f"❌ Error en update_product: {e}")
             return False, str(e)
 
     def delete_product(self, product_id: str) -> Tuple[bool, str]:
@@ -636,6 +873,34 @@ class DatabaseManager:
         }
         return names.get(role, 'Usuario')
     
+    # ==================== VERIFICAR ALERTAS DE PRECIOS ====================
+    def _verificar_alertas(self, product_id: str, nuevo_precio: float):
+        """Método helper para verificar alertas de precio"""
+        try:
+            from datetime import datetime
+            alertas = self.supabase.table("alertas_precio")\
+                .select("*, producto(nombre_prod)")\
+                .eq("id_prod", product_id)\
+                .eq("activa", True)\
+                .lte("precio_objetivo", nuevo_precio)\
+                .eq("notificada", False)\
+                .execute()
+            
+            for alerta in alertas.data or []:
+                self.supabase.table("alertas_precio")\
+                    .update({
+                        "notificada": True,
+                        "fecha_notificacion": datetime.now().isoformat()
+                    })\
+                    .eq("id", alerta["id"])\
+                    .execute()
+                
+                print(f"🔔 ALERTA: {alerta['producto']['nombre_prod']} "
+                    f"bajó a ${nuevo_precio} (objetivo: ${alerta['precio_objetivo']})")
+        except Exception as e:
+            print(f"⚠️ Error verificando alertas: {e}")
+
+
     # ===== MÉTODOS PARA PROVEEDORES =====
     def insert_proveedor(self, proveedor_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
         """Inserta un nuevo proveedor en Supabase"""
@@ -657,24 +922,25 @@ class DatabaseManager:
         except Exception as e:
             return None, str(e)
 
+
     def search_proveedores(self, search_text: str, sort_by: str = 'nombre') -> Tuple[List[Dict], Optional[str]]:
-        """Busca proveedores - Compatible con Supabase 1.0.3"""
+        """Busca proveedores - Compatible con Supabase 1.0.3 y con enriquecimiento de coordenadas"""
         try:
+            # Caso 1: Sin texto de búsqueda (obtener todos los activos)
             if not search_text.strip():
                 query = self.supabase.table('proveedor').select('*').eq('activo_provee', True)
                 response = query.execute()
-                return response.data, None
-            
-            # Múltiples consultas para simular OR
+                return self._enrich_proveedores(response.data), None  # ← fix: era all_results
+
+            # Caso 2: Con texto de búsqueda (Simulación de OR con múltiples consultas)
             queries = [
                 self.supabase.table('proveedor').select('*').eq('activo_provee', True).ilike('nombre_provee', f'%{search_text}%'),
                 self.supabase.table('proveedor').select('*').eq('activo_provee', True).ilike('representa_provee', f'%{search_text}%')
             ]
-            
-            # Ejecutar todas las consultas
+
             all_results = []
             seen_ids = set()
-            
+
             for query in queries:
                 response = query.execute()
                 for item in response.data:
@@ -682,16 +948,16 @@ class DatabaseManager:
                     if item_id not in seen_ids:
                         all_results.append(item)
                         seen_ids.add(item_id)
-            
-            # Ordenar
+
             if sort_by == 'nombre':
                 all_results.sort(key=lambda x: x.get('nombre_provee', '').lower())
             elif sort_by == 'categoria':
                 all_results.sort(key=lambda x: x.get('cate_provee', '').lower())
-            
-            return all_results, None
-            
+
+            return self._enrich_proveedores(all_results), None
+
         except Exception as e:
+            print(f"Error en search_proveedores: {e}")
             return [], str(e)
 
     def get_proveedor_by_id(self, proveedor_id: str) -> Tuple[Optional[Dict], Optional[str]]:
@@ -709,6 +975,16 @@ class DatabaseManager:
         try:
             response = self.supabase.table('proveedor').select(field).eq(field, value).execute()
             return len(response.data) > 0, None
+        except Exception as e:
+            return False, str(e)
+
+    def delete_proveedor(self, proveedor_id: str):
+        try:
+            response = self.supabase.table('proveedor')\
+                .update({'activo_provee': False})\
+                .eq('id_provee', proveedor_id)\
+                .execute()
+            return True, "Proveedor eliminado correctamente"
         except Exception as e:
             return False, str(e)
 
@@ -788,5 +1064,190 @@ class DatabaseManager:
                 'fecha_actualizacion_user': datetime.now().isoformat()
             }).eq('id_user', user_id).execute()
             return (True, "Usuario eliminado") if response.data else (False, "No se eliminó el usuario")
+        except Exception as e:
+            return False, str(e)
+
+    # ============================================
+    # Funciones Listas de Compra
+    # ============================================
+
+    def get_listas_by_user(self, user_id: str) -> Tuple[List[dict], Optional[str]]:
+        """Obtiene todas las listas activas de un usuario"""
+        try:
+            response = self.supabase.table('lista_compra')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('activa', True)\
+                .order('fecha_modificacion', desc=True)\
+                .execute()
+            return response.data or [], None
+        except Exception as e:
+            return [], str(e)
+
+    def create_lista(self, user_id: str, nombre_lista: str) -> Tuple[Optional[dict], Optional[str]]:
+        """Crea una nueva lista de compra"""
+        try:
+            now = datetime.now().isoformat()
+            response = self.supabase.table('lista_compra').insert({
+                'user_id': user_id,
+                'nombre_lista': nombre_lista.strip(),
+                'fecha_creacion': now,
+                'fecha_modificacion': now,
+                'activa': True
+            }).execute()
+            if response.data:
+                return response.data[0], None
+            return None, 'Error al crear la lista'
+        except Exception as e:
+            return None, str(e)
+
+    def update_lista(self, lista_id: str, user_id: str, data: dict) -> Tuple[Optional[dict], Optional[str]]:
+        """Actualiza el nombre u otros campos de una lista"""
+        try:
+            data['fecha_modificacion'] = datetime.now().isoformat()
+            response = self.supabase.table('lista_compra')\
+                .update(data)\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .execute()
+            if response.data:
+                return response.data[0], None
+            return None, 'Lista no encontrada o sin permisos'
+        except Exception as e:
+            return None, str(e)
+
+    def delete_lista(self, lista_id: str, user_id: str) -> Tuple[bool, str]:
+        """Desactiva una lista (soft delete)"""
+        try:
+            response = self.supabase.table('lista_compra')\
+                .update({'activa': False, 'fecha_modificacion': datetime.now().isoformat()})\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .execute()
+            return True, 'Lista eliminada correctamente'
+        except Exception as e:
+            return False, str(e)
+
+    def get_lista_by_id(self, lista_id: str, user_id: str) -> Tuple[Optional[dict], Optional[str]]:
+        """Obtiene una lista con sus items"""
+        try:
+            lista_resp = self.supabase.table('lista_compra')\
+                .select('*')\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .eq('activa', True)\
+                .limit(1)\
+                .execute()
+            if not lista_resp.data:
+                return None, 'Lista no encontrada'
+            lista = lista_resp.data[0]
+
+            items_resp = self.supabase.table('lista_item')\
+                .select('*, producto(id_prod, nombre_prod, imagen_prod, precio_prod, marca_prod, provee_prod, unidad_prod, cantidad_prod)')\
+                .eq('id_lista', lista_id)\
+                .execute()
+            lista['items'] = items_resp.data or []
+            return lista, None
+        except Exception as e:
+            return None, str(e)
+
+    # ── Items ──
+
+    def add_item_to_lista(self, lista_id: str, user_id: str, item_data: dict) -> Tuple[Optional[dict], Optional[str]]:
+        """Agrega un ítem a una lista"""
+        try:
+            # Verificar que la lista pertenece al usuario
+            check = self.supabase.table('lista_compra')\
+                .select('id_lista')\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .execute()
+            if not check.data:
+                return None, 'Lista no encontrada o sin permisos'
+
+            payload = {
+                'id_lista':           lista_id,
+                'id_prod':            item_data.get('id_prod'),
+                'nombre_item':        item_data.get('nombre_item', ''),
+                'cantidad':           item_data.get('cantidad', 1),
+                'unidad':             item_data.get('unidad', ''),
+                'marca':              item_data.get('marca', ''),
+                'acepta_sustitucion': item_data.get('acepta_sustitucion', True),
+                'prioridad':          item_data.get('prioridad', 'importante'),
+                'estado':             item_data.get('estado', 'pendiente'),
+                'notas':              item_data.get('notas', ''),
+                'precio_referencia':  item_data.get('precio_referencia'),
+            }
+            response = self.supabase.table('lista_item').insert(payload).execute()
+            if response.data:
+                # Actualizar fecha_modificacion de la lista
+                self.supabase.table('lista_compra')\
+                    .update({'fecha_modificacion': datetime.now().isoformat()})\
+                    .eq('id_lista', lista_id)\
+                    .execute()
+                return response.data[0], None
+            return None, 'Error al agregar ítem'
+        except Exception as e:
+            return None, str(e)
+
+    def update_item(self, item_id: str, user_id: str, data: dict) -> Tuple[Optional[dict], Optional[str]]:
+        """Actualiza un ítem (cantidad, estado, notas, etc.)"""
+        try:
+            # Verificar ownership via lista
+            item_resp = self.supabase.table('lista_item')\
+                .select('id_lista')\
+                .eq('id_item', item_id)\
+                .execute()
+            if not item_resp.data:
+                return None, 'Ítem no encontrado'
+
+            lista_id = item_resp.data[0]['id_lista']
+            check = self.supabase.table('lista_compra')\
+                .select('id_lista')\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .execute()
+            if not check.data:
+                return None, 'Sin permisos'
+
+            response = self.supabase.table('lista_item')\
+                .update(data)\
+                .eq('id_item', item_id)\
+                .execute()
+            if response.data:
+                self.supabase.table('lista_compra')\
+                    .update({'fecha_modificacion': datetime.now().isoformat()})\
+                    .eq('id_lista', lista_id)\
+                    .execute()
+                return response.data[0], None
+            return None, 'Error al actualizar'
+        except Exception as e:
+            return None, str(e)
+
+    def delete_item(self, item_id: str, user_id: str) -> Tuple[bool, str]:
+        """Elimina un ítem de una lista"""
+        try:
+            item_resp = self.supabase.table('lista_item')\
+                .select('id_lista')\
+                .eq('id_item', item_id)\
+                .execute()
+            if not item_resp.data:
+                return False, 'Ítem no encontrado'
+
+            lista_id = item_resp.data[0]['id_lista']
+            check = self.supabase.table('lista_compra')\
+                .select('id_lista')\
+                .eq('id_lista', lista_id)\
+                .eq('user_id', user_id)\
+                .execute()
+            if not check.data:
+                return False, 'Sin permisos'
+
+            self.supabase.table('lista_item').delete().eq('id_item', item_id).execute()
+            self.supabase.table('lista_compra')\
+                .update({'fecha_modificacion': datetime.now().isoformat()})\
+                .eq('id_lista', lista_id)\
+                .execute()
+            return True, 'Ítem eliminado'
         except Exception as e:
             return False, str(e)

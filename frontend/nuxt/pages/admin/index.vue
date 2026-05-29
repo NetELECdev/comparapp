@@ -1,0 +1,1374 @@
+<template>
+  <div class="admin-page">
+    <div class="bg-gradient" />
+    <div class="bg-noise" />
+
+    <main class="page-content">
+      <!-- HEADER -->
+      <header class="page-header animate-fade-in-up">
+        <div class="header-left">
+          <button class="back-btn" @click="navigateTo('/dashboard')" aria-label="Volver">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+          </button>
+          <div>
+            <h1 class="page-title">Panel Admin</h1>
+            <p class="page-subtitle">Gestión de la plataforma</p>
+          </div>
+        </div>
+        <button class="refresh-btn" @click="loadData" :class="{ spinning: loading }">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M16 16h5v-5"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- STATS -->
+      <div class="stats-grid animate-fade-in-up stagger-1">
+        <div class="stat-card">
+          <div class="stat-icon-wrap icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m7.5 4.27 9 5.15"/>
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+              <path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ productos.length }}</span>
+            <span class="stat-label">Productos</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrap icon-amber">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ proveedores.length }}</span>
+            <span class="stat-label">Proveedores</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrap icon-emerald">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ categoriasUnicas.length }}</span>
+            <span class="stat-label">Categorías</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrap icon-fire">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ productosEnOferta.length }}</span>
+            <span class="stat-label">En oferta</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs-bar animate-fade-in-up stagger-2">
+        <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+          <span v-html="tab.icon"></span>
+          <span class="tab-label">{{ tab.label }}</span>
+        </button>
+      </div>
+
+      <!-- TAB: PRODUCTOS -->
+      <div v-if="activeTab === 'productos'" class="tab-content animate-fade-in-up">
+        <div class="section-header">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input v-model="searchProductos" placeholder="Buscar producto..." />
+          </div>
+          <button class="btn-primary" @click="openModal('producto')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14"/><path d="M12 5v14"/>
+            </svg>
+            Nuevo
+          </button>
+        </div>
+
+        <div v-if="productosFiltrados.length === 0" class="empty-state">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+          </div>
+          <h3>No hay productos</h3>
+          <p>Cargá el primer producto</p>
+        </div>
+
+        <div v-else class="items-list">
+          <div v-for="p in productosFiltrados" :key="p.id_prod" class="item-card" :class="{ 'en-oferta': ofertaActivaPorProducto(p.id_prod) }">
+            <div class="item-main">
+              <img :src="p.imagen_prod || '/images/avatar_default.png'" class="item-thumb" @error="$event.target.src='/images/avatar_default.png'"/>
+              <div class="item-info">
+                <div class="item-name-row">
+                  <span class="item-name">{{ p.nombre_prod }}</span>
+                  <span v-if="ofertaActivaPorProducto(p.id_prod)" class="oferta-badge-mini">
+                    🔥 -{{ ofertaActivaPorProducto(p.id_prod)?.descuento_pct }}%
+                  </span>
+                </div>
+                <div class="item-meta">
+                  <span class="badge">{{ p.cate_prod }}</span>
+                  <span class="badge">{{ p.marca_prod }}</span>
+                  <span v-if="ofertaActivaPorProducto(p.id_prod)" class="price precio-con-oferta">
+                    <span class="precio-tachado">${{ formatPrice(p.precio_prod) }}</span>
+                    <span class="precio-nuevo">${{ formatPrice(ofertaActivaPorProducto(p.id_prod)?.precio_oferta) }}</span>
+                  </span>
+                  <span v-else class="price">${{ formatPrice(p.precio_prod) }}</span>
+                </div>
+                <span class="item-sub">{{ p.provee_prod }} • {{ p.cantidad_prod }} {{ p.unidad_prod }}</span>
+              </div>
+            </div>
+
+            <div class="item-actions">
+              <!-- Toggle oferta -->
+              <button
+                class="action-btn oferta-toggle"
+                :class="{ active: ofertaActivaPorProducto(p.id_prod) }"
+                @click="toggleOfertaPanel(p)"
+                :title="ofertaActivaPorProducto(p.id_prod) ? 'Gestionar oferta' : 'Activar oferta'"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                </svg>
+              </button>
+              <button class="action-btn edit" @click="editProducto(p)" title="Editar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                </svg>
+              </button>
+              <button class="action-btn delete" @click="confirmDelete('producto', p)" title="Eliminar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- PANEL OFERTA INLINE -->
+            <Transition name="slide-down">
+              <div v-if="ofertaPanelProductoId === p.id_prod" class="oferta-panel">
+                <div class="oferta-panel-header">
+                  <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                    </svg>
+                    {{ ofertaActivaPorProducto(p.id_prod) ? 'Oferta activa' : 'Nueva oferta' }}
+                  </span>
+                  <button class="oferta-panel-close" @click="ofertaPanelProductoId = null">✕</button>
+                </div>
+
+                <div class="oferta-panel-body">
+                  <div class="oferta-panel-grid">
+                    <div class="form-group">
+                      <label>Precio normal</label>
+                      <input :value="formatPrice(p.precio_prod)" disabled class="input-disabled" />
+                    </div>
+                    <div class="form-group">
+                      <label>Precio oferta *</label>
+                      <input
+                        v-model.number="formOfertaPanel.precio_oferta"
+                        type="number" step="0.01" min="0.01"
+                        placeholder="Ej: 1199.00"
+                        @input="calcularDescuentoPanel(Number(p.precio_prod))"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-if="descuentoPanel > 0 && !errorPrecioPanel" class="descuento-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                    -{{ descuentoPanel }}% · Ahorrás ${{ formatPrice(Number(p.precio_prod) - formOfertaPanel.precio_oferta) }}
+                  </div>
+                  <div v-if="errorPrecioPanel" class="oferta-error">⚠️ El precio de oferta debe ser menor al precio normal</div>
+
+                  <div class="form-group">
+                    <label>Vence el *</label>
+                    <input v-model="formOfertaPanel.fecha_fin" type="datetime-local" />
+                  </div>
+
+                  <div class="oferta-panel-actions">
+                    <button
+                      v-if="ofertaActivaPorProducto(p.id_prod)"
+                      class="btn-desactivar"
+                      @click="desactivarOferta(p)"
+                      :disabled="savingOferta"
+                    >
+                      {{ savingOferta ? '...' : 'Desactivar oferta' }}
+                    </button>
+                    <button
+                      class="btn-guardar-oferta"
+                      @click="guardarOferta(p)"
+                      :disabled="savingOferta || errorPrecioPanel || !formOfertaPanel.precio_oferta || !formOfertaPanel.fecha_fin"
+                    >
+                      {{ savingOferta ? 'Guardando...' : (ofertaActivaPorProducto(p.id_prod) ? 'Actualizar' : 'Activar oferta') }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: PROVEEDORES -->
+      <div v-if="activeTab === 'proveedores'" class="tab-content animate-fade-in-up">
+        <div class="section-header">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input v-model="searchProveedores" placeholder="Buscar proveedor..." />
+          </div>
+          <button class="btn-primary" @click="openModal('proveedor')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14"/><path d="M12 5v14"/>
+            </svg>
+            Nuevo
+          </button>
+        </div>
+        <div v-if="proveedoresFiltrados.length === 0" class="empty-state">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
+            </svg>
+          </div>
+          <h3>No hay proveedores</h3>
+          <p>Cargá el primer proveedor</p>
+        </div>
+        <div v-else class="cards-grid">
+          <div v-for="prov in proveedoresFiltrados" :key="prov.id_provee" class="provider-card">
+            <div class="provider-header">
+              <img :src="prov.logo_provee || '/images/avatar_default.png'" class="provider-logo" @error="$event.target.src='/images/avatar_default.png'"/>
+              <div class="provider-status" :class="prov.activo_provee ? 'active' : 'inactive'" />
+            </div>
+            <h3 class="provider-name">{{ prov.nombre_provee }}</h3>
+            <p class="provider-cat">{{ prov.cate_provee }}</p>
+            <div class="provider-meta">
+              <span v-if="prov.direccion_provee">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                {{ prov.direccion_provee }}
+              </span>
+              <span v-if="prov.email_provee">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+                {{ prov.email_provee }}
+              </span>
+            </div>
+            <div class="provider-actions">
+              <button class="btn-sm" @click="editProveedor(prov)">Editar</button>
+              <button class="btn-sm danger" @click="confirmDelete('proveedor', prov)">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: CATEGORÍAS -->
+      <div v-if="activeTab === 'categorias'" class="tab-content animate-fade-in-up">
+        <div class="section-header">
+          <h2 class="section-title">Categorías detectadas</h2>
+          <span class="section-badge">{{ categoriasUnicas.length }}</span>
+        </div>
+        <div class="cards-grid categories-grid">
+          <div v-for="cat in categoriasConConteo" :key="cat.nombre" class="category-card">
+            <div class="cat-icon">{{ getDefaultIcon(cat.nombre) }}</div>
+            <h3>{{ cat.nombre }}</h3>
+            <p>{{ cat.cantidad }} productos</p>
+            <div class="cat-bar">
+              <div class="cat-bar-fill" :style="{ width: cat.porcentaje + '%', background: cat.color }" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: OFERTAS (vista resumen) -->
+      <div v-if="activeTab === 'ofertas'" class="tab-content animate-fade-in-up">
+        <div class="section-header">
+          <h2 class="section-title">Ofertas vigentes</h2>
+          <span class="section-badge">{{ productosEnOferta.length }}</span>
+        </div>
+
+        <div v-if="loadingOfertas" class="loading-state">
+          <div class="loading-spinner" />
+          <p>Cargando ofertas...</p>
+        </div>
+
+        <div v-else-if="productosEnOferta.length === 0" class="empty-state">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+          </div>
+          <h3>Sin ofertas activas</h3>
+          <p>Andá a Productos y tocá el ícono 🔥 para activar una oferta</p>
+        </div>
+
+        <div v-else class="items-list">
+          <div v-for="oferta in productosEnOferta" :key="oferta.id" class="item-card oferta-card">
+            <div class="item-main">
+              <img :src="oferta.imagen_prod || '/images/avatar_default.png'" class="item-thumb" @error="$event.target.src='/images/avatar_default.png'"/>
+              <div class="item-info">
+                <div class="item-name-row">
+                  <span class="item-name">{{ oferta.nombre_prod }}</span>
+                  <span class="oferta-badge-mini">-{{ oferta.descuento_pct }}%</span>
+                </div>
+                <div class="item-meta">
+                  <span class="badge">{{ oferta.cate_prod }}</span>
+                  <span class="price precio-con-oferta">
+                    <span class="precio-tachado">${{ formatPrice(oferta.precio_normal) }}</span>
+                    <span class="precio-nuevo">${{ formatPrice(oferta.precio_oferta) }}</span>
+                  </span>
+                </div>
+                <span class="item-sub oferta-vence">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                  </svg>
+                  Vence {{ formatFechaOferta(oferta.fecha_fin) }}
+                </span>
+              </div>
+            </div>
+            <div class="item-actions">
+              <button class="action-btn delete" @click="desactivarOfertaById(oferta)" title="Desactivar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: USUARIOS -->
+      <div v-if="activeTab === 'usuarios'" class="tab-content animate-fade-in-up">
+        <div class="empty-state">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <h3>Usuarios</h3>
+          <p>Usá el Supabase Dashboard para gestionar usuarios.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottom-bar">
+      <button class="bottom-btn" @click="navigateTo('/dashboard')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button class="bottom-btn bottom-btn--accent" @click="navigateTo('/Productos')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+        <span>Comparar</span>
+      </button>
+      <button class="bottom-btn" @click="navigateTo('/Productos/lista')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <span>Productos</span>
+      </button>
+      <button class="bottom-btn" @click="navigateTo('/perfil')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Perfil</span>
+      </button>
+    </div>
+
+    <!-- MODAL PRODUCTO -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="modalProductoOpen" class="modal-overlay" @click.self="closeModalProducto">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3>{{ editingProductoId ? 'Editar Producto' : 'Nuevo Producto' }}</h3>
+              <button class="modal-close" @click="closeModalProducto">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <form class="modal-body form-grid" @submit.prevent="saveProducto">
+              <div class="form-group full">
+                <label>Nombre *</label>
+                <input v-model="formProducto.nombre_prod" required placeholder="Ej: Crema de Leche" />
+              </div>
+              <div class="form-group">
+                <label>Categoría *</label>
+                <select v-model="formProducto.cate_prod" required>
+                  <option value="">Seleccionar...</option>
+                  <option v-for="cat in categoriasUnicas" :key="cat" :value="cat">{{ cat }}</option>
+                </select>
+                <input v-if="formProducto.cate_prod === '__nueva__'" v-model="nuevaCategoria" placeholder="Nueva categoría..." class="mt-2" />
+              </div>
+              <div class="form-group">
+                <label>Marca *</label>
+                <input v-model="formProducto.marca_prod" required placeholder="Ej: Tonadita" />
+              </div>
+              <div class="form-group">
+                <label>Precio *</label>
+                <input v-model="formProducto.precio_prod" type="number" step="0.01" required placeholder="1499.00" />
+              </div>
+              <div class="form-group">
+                <label>Cantidad</label>
+                <input v-model="formProducto.cantidad_prod" type="number" placeholder="200" />
+              </div>
+              <div class="form-group">
+                <label>Unidad</label>
+                <select v-model="formProducto.unidad_prod">
+                  <option value="Unidad">Unidad</option>
+                  <option value="Gramo">Gramo</option>
+                  <option value="Kilogramo">Kilogramo</option>
+                  <option value="Litro">Litro</option>
+                  <option value="Mililitro">Mililitro</option>
+                  <option value="Centímetro">Centímetro</option>
+                  <option value="Metro">Metro</option>
+                  <option value="Paquete">Paquete</option>
+                  <option value="Caja">Caja</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label>Proveedor *</label>
+                <select v-model="formProducto.provee_prod" required>
+                  <option value="">Seleccionar...</option>
+                  <option v-for="prov in proveedores" :key="prov.id_provee" :value="prov.nombre_provee">{{ prov.nombre_provee }}</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label>Descripción</label>
+                <textarea v-model="formProducto.describe_prod" rows="2" placeholder="Descripción..."></textarea>
+              </div>
+              <div class="form-group full">
+                <label>Imagen URL</label>
+                <input v-model="formProducto.imagen_prod" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input v-model="formProducto.activo_prod" type="checkbox" />
+                  <span>Activo</span>
+                </label>
+              </div>
+              <div class="form-actions full">
+                <button type="button" class="btn-secondary" @click="closeModalProducto">Cancelar</button>
+                <button type="submit" class="btn-primary" :disabled="saving">
+                  {{ saving ? 'Guardando...' : (editingProductoId ? 'Actualizar' : 'Crear') }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- MODAL PROVEEDOR -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="modalProveedorOpen" class="modal-overlay" @click.self="closeModalProveedor">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3>{{ editingProveedorId ? 'Editar Proveedor' : 'Nuevo Proveedor' }}</h3>
+              <button class="modal-close" @click="closeModalProveedor">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <form class="modal-body form-grid" @submit.prevent="saveProveedor">
+              <div class="form-group full">
+                <label>Nombre *</label>
+                <input v-model="formProveedor.nombre_provee" required placeholder="Ej: Autoservicio Real" />
+              </div>
+              <div class="form-group">
+                <label>Categoría</label>
+                <input v-model="formProveedor.cate_provee" placeholder="Ej: Comercio" />
+              </div>
+              <div class="form-group">
+                <label>Teléfono</label>
+                <input v-model="formProveedor.te_provee" placeholder="+54..." />
+              </div>
+              <div class="form-group full">
+                <label>Email</label>
+                <input v-model="formProveedor.email_provee" type="email" placeholder="email@..." />
+              </div>
+              <div class="form-group full">
+                <label>Dirección</label>
+                <input v-model="formProveedor.direccion_provee" placeholder="Rio Negro 528..." />
+              </div>
+              <div class="form-group full">
+                <label>Representante</label>
+                <input v-model="formProveedor.representa_provee" placeholder="Nombre contacto" />
+              </div>
+              <div class="form-group full">
+                <label>Logo URL</label>
+                <input v-model="formProveedor.logo_provee" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input v-model="formProveedor.activo_provee" type="checkbox" />
+                  <span>Activo</span>
+                </label>
+              </div>
+              <div class="form-actions full">
+                <button type="button" class="btn-secondary" @click="closeModalProveedor">Cancelar</button>
+                <button type="submit" class="btn-primary" :disabled="saving">
+                  {{ saving ? 'Guardando...' : (editingProveedorId ? 'Actualizar' : 'Crear') }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- CONFIRM DELETE -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="deleteModalOpen" class="modal-overlay" @click.self="deleteModalOpen = false">
+          <div class="modal-container modal-sm">
+            <div class="modal-header"><h3>¿Eliminar?</h3></div>
+            <div class="modal-body">
+              <p class="confirm-text">¿Eliminar {{ deleteItemName }}? No se puede deshacer.</p>
+              <div class="form-actions">
+                <button class="btn-secondary" @click="deleteModalOpen = false">Cancelar</button>
+                <button class="btn-danger" @click="executeDelete" :disabled="deleting">
+                  {{ deleting ? 'Eliminando...' : 'Sí, eliminar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- TOAST -->
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="toast.show" class="toast" :class="toast.type">
+          <svg v-if="toast.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          {{ toast.message }}
+        </div>
+      </Transition>
+    </Teleport>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRuntimeConfig, navigateTo } from '#app'
+
+// ─── INTERFACES ───────────────────────────────────────────────
+
+interface Producto {
+  id_prod: string
+  nombre_prod: string
+  cate_prod: string
+  describe_prod: string | null
+  unidad_prod: string
+  cantidad_prod: number
+  activo_prod: boolean
+  provee_prod: string
+  fecha_prod: string
+  marca_prod: string
+  imagen_prod: string | null
+  precio_prod: string
+}
+
+interface Proveedor {
+  id_provee: string
+  nombre_provee: string
+  direccion_provee: string | null
+  te_provee: string | null
+  email_provee: string | null
+  representa_provee: string | null
+  fechaIngreso_provee: string
+  activo_provee: boolean
+  cate_provee: string
+  logo_provee: string | null
+}
+
+interface Oferta {
+  id: string
+  id_prod: string
+  precio_normal: number
+  precio_oferta: number
+  descuento_pct: number
+  fecha_inicio: string
+  fecha_fin: string
+  activa: boolean
+  nombre_prod: string
+  marca_prod: string
+  cate_prod: string
+  imagen_prod: string | null
+}
+
+// ─── ESTADO BASE ──────────────────────────────────────────────
+
+const config = useRuntimeConfig()
+const loading = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
+
+const productos = ref<Producto[]>([])
+const proveedores = ref<Proveedor[]>([])
+const ofertas = ref<Oferta[]>([])
+const loadingOfertas = ref(false)
+
+const activeTab = ref('productos')
+const searchProductos = ref('')
+const searchProveedores = ref('')
+
+const tabs = [
+  { id: 'productos',   label: 'Productos',   icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>' },
+  { id: 'proveedores', label: 'Proveedores', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>' },
+  { id: 'categorias',  label: 'Categorías',  icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>' },
+  { id: 'ofertas',     label: 'Ofertas',     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' },
+  { id: 'usuarios',    label: 'Usuarios',    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+]
+
+// ─── COMPUTED ─────────────────────────────────────────────────
+
+const productosFiltrados = computed(() => {
+  if (!searchProductos.value) return productos.value
+  const q = searchProductos.value.toLowerCase()
+  return productos.value.filter(p =>
+    p.nombre_prod.toLowerCase().includes(q) ||
+    p.marca_prod.toLowerCase().includes(q) ||
+    p.cate_prod.toLowerCase().includes(q)
+  )
+})
+
+const proveedoresFiltrados = computed(() => {
+  if (!searchProveedores.value) return proveedores.value
+  const q = searchProveedores.value.toLowerCase()
+  return proveedores.value.filter(p =>
+    p.nombre_provee.toLowerCase().includes(q) ||
+    (p.direccion_provee && p.direccion_provee.toLowerCase().includes(q))
+  )
+})
+
+const categoriasUnicas = computed(() => {
+  const set = new Set(productos.value.map(p => p.cate_prod).filter(Boolean))
+  return Array.from(set).sort()
+})
+
+const categoriasConConteo = computed(() => {
+  const total = productos.value.length || 1
+  const map = new Map<string, number>()
+  productos.value.forEach(p => { map.set(p.cate_prod, (map.get(p.cate_prod) || 0) + 1) })
+  return Array.from(map.entries()).map(([nombre, cantidad]) => ({
+    nombre, cantidad,
+    porcentaje: Math.round((cantidad / total) * 100),
+    color: getCategoryColor(nombre)
+  })).sort((a, b) => b.cantidad - a.cantidad)
+})
+
+// Mapa rápido: id_prod → oferta activa
+const ofertasPorProducto = computed(() => {
+  const map = new Map<string, Oferta>()
+  ofertas.value.forEach(o => map.set(o.id_prod, o))
+  return map
+})
+
+const productosEnOferta = computed(() => ofertas.value)
+
+function ofertaActivaPorProducto(id_prod: string): Oferta | undefined {
+  return ofertasPorProducto.value.get(id_prod)
+}
+
+// ─── TOAST ────────────────────────────────────────────────────
+
+const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
+function showToast(message: string, type: 'success' | 'error' = 'success') {
+  toast.value = { show: true, message, type }
+  setTimeout(() => toast.value.show = false, 3000)
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────
+
+function formatPrice(price: string | number | undefined): string {
+  if (price === undefined || price === null) return '0'
+  return Number(price)?.toLocaleString('es-AR') || '0'
+}
+
+function getCategoryColor(nombre: string): string {
+  const colors: Record<string, string> = {
+    'Almacen': '#fbbf24', 'Bebidas': '#60a5fa', 'Limpieza': '#34d399',
+    'Carnes': '#f87171', 'Frutas': '#4ade80', 'Verduras': '#22c55e',
+    'Congelados': '#38bdf8', 'Hogar': '#a78bfa', 'Comercio': '#e8c4a0'
+  }
+  return colors[nombre] || '#e8c4a0'
+}
+
+function getDefaultIcon(nombre: string): string {
+  const icons: Record<string, string> = {
+    'Almacen': '🥫', 'Bebidas': '🥤', 'Limpieza': '🧼', 'Carnes': '🥩',
+    'Frutas': '🍎', 'Verduras': '🥬', 'Congelados': '🧊', 'Hogar': '🏠', 'Ferreteria': '🔧'
+  }
+  return icons[nombre] || '📦'
+}
+
+function formatFechaOferta(fechaStr: string): string {
+  if (!fechaStr) return 'sin fecha'
+  const fecha = new Date(fechaStr)
+  const ahora = new Date()
+  const dias = Math.ceil((fecha.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+  if (dias <= 0) return 'hoy'
+  if (dias === 1) return 'mañana'
+  if (dias <= 7) return `en ${dias} días`
+  return fecha.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
+function toDatetimeLocalString(isoStr?: string): string {
+  if (!isoStr) {
+    const d = new Date(); d.setDate(d.getDate() + 7)
+    return d.toISOString().slice(0, 16)
+  }
+  return new Date(isoStr).toISOString().slice(0, 16)
+}
+
+// ─── PANEL OFERTA INLINE ──────────────────────────────────────
+
+const ofertaPanelProductoId = ref<string | null>(null)
+const savingOferta = ref(false)
+
+const formOfertaPanel = ref({
+  precio_oferta: 0,
+  fecha_fin: toDatetimeLocalString()
+})
+
+const descuentoPanel = ref(0)
+const errorPrecioPanel = ref(false)
+
+function calcularDescuentoPanel(precioNormal: number) {
+  const oferta = formOfertaPanel.value.precio_oferta
+  if (precioNormal > 0 && oferta > 0) {
+    errorPrecioPanel.value = oferta >= precioNormal
+    descuentoPanel.value = errorPrecioPanel.value ? 0 : Math.round((precioNormal - oferta) / precioNormal * 100)
+  } else {
+    descuentoPanel.value = 0
+    errorPrecioPanel.value = false
+  }
+}
+
+function toggleOfertaPanel(p: Producto) {
+  if (ofertaPanelProductoId.value === p.id_prod) {
+    // Cerrar si ya estaba abierto
+    ofertaPanelProductoId.value = null
+    return
+  }
+  // Abrir: pre-rellenar si hay oferta activa
+  const ofertaActiva = ofertaActivaPorProducto(p.id_prod)
+  formOfertaPanel.value = {
+    precio_oferta: ofertaActiva?.precio_oferta ?? 0,
+    fecha_fin: ofertaActiva ? toDatetimeLocalString(ofertaActiva.fecha_fin) : toDatetimeLocalString()
+  }
+  descuentoPanel.value = ofertaActiva?.descuento_pct ?? 0
+  errorPrecioPanel.value = false
+  ofertaPanelProductoId.value = p.id_prod
+}
+
+async function guardarOferta(p: Producto) {
+  if (errorPrecioPanel.value || !formOfertaPanel.value.precio_oferta || !formOfertaPanel.value.fecha_fin) return
+  savingOferta.value = true
+  try {
+    const ofertaActiva = ofertaActivaPorProducto(p.id_prod)
+    const payload = {
+      id_prod: p.id_prod,
+      precio_normal: Number(p.precio_prod),
+      precio_oferta: formOfertaPanel.value.precio_oferta,
+      fecha_inicio: new Date().toISOString(),
+      fecha_fin: new Date(formOfertaPanel.value.fecha_fin).toISOString()
+    }
+
+    if (ofertaActiva) {
+      // Actualizar existente
+      await $fetch(`${config.public.apiBase}/ofertas/${ofertaActiva.id}`, { method: 'PUT', body: payload })
+      showToast('Oferta actualizada')
+    } else {
+      // Crear nueva
+      await $fetch(`${config.public.apiBase}/ofertas`, { method: 'POST', body: payload })
+      showToast('🔥 Oferta activada')
+    }
+    ofertaPanelProductoId.value = null
+    await loadOfertas()
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'Error al guardar oferta', 'error')
+  } finally {
+    savingOferta.value = false
+  }
+}
+
+async function desactivarOferta(p: Producto) {
+  const ofertaActiva = ofertaActivaPorProducto(p.id_prod)
+  if (!ofertaActiva) return
+  await desactivarOfertaById(ofertaActiva)
+  ofertaPanelProductoId.value = null
+}
+
+async function desactivarOfertaById(oferta: Oferta) {
+  savingOferta.value = true
+  try {
+    await $fetch(`${config.public.apiBase}/ofertas/${oferta.id}`, { method: 'DELETE' })
+    showToast('Oferta desactivada')
+    await loadOfertas()
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'Error al desactivar', 'error')
+  } finally {
+    savingOferta.value = false
+  }
+}
+
+// ─── MODAL PRODUCTO ───────────────────────────────────────────
+
+const modalProductoOpen = ref(false)
+const editingProductoId = ref<string | null>(null)
+const nuevaCategoria = ref('')
+const formProducto = ref<Partial<Producto>>({
+  nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
+  cantidad_prod: 1, unidad_prod: 'Unidad', provee_prod: '',
+  describe_prod: '', imagen_prod: '', activo_prod: true
+})
+
+function openModal(type: string) {
+  if (type === 'producto') {
+    editingProductoId.value = null
+    formProducto.value = {
+      nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
+      cantidad_prod: 1, unidad_prod: 'Unidad', provee_prod: '',
+      describe_prod: '', imagen_prod: '', activo_prod: true
+    }
+    modalProductoOpen.value = true
+  } else if (type === 'proveedor') {
+    openModalProveedor()
+  }
+}
+
+function closeModalProducto() {
+  modalProductoOpen.value = false
+  editingProductoId.value = null
+  nuevaCategoria.value = ''
+}
+
+function editProducto(p: Producto) {
+  editingProductoId.value = p.id_prod
+  formProducto.value = { ...p }
+  modalProductoOpen.value = true
+}
+
+async function saveProducto() {
+  saving.value = true
+  try {
+    const payload: Record<string, any> = {
+      nombre_prod: formProducto.value.nombre_prod?.trim(),
+      cate_prod: formProducto.value.cate_prod?.trim(),
+      marca_prod: formProducto.value.marca_prod?.trim(),
+      precio_prod: String(formProducto.value.precio_prod || 0),
+      cantidad_prod: Number(formProducto.value.cantidad_prod) || 1,
+      unidad_prod: formProducto.value.unidad_prod || 'Unidad',
+      provee_prod: formProducto.value.provee_prod?.trim(),
+      describe_prod: formProducto.value.describe_prod?.trim() || null,
+      imagen_prod: formProducto.value.imagen_prod?.trim() || null,
+      activo_prod: !!formProducto.value.activo_prod,
+    }
+    if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.provee_prod) {
+      showToast('Completá todos los campos requeridos (*)', 'error')
+      saving.value = false
+      return
+    }
+    if (editingProductoId.value) {
+      await $fetch(`${config.public.apiBase}/products/${editingProductoId.value}`, { method: 'PUT', body: payload })
+      const idx = productos.value.findIndex(p => p.id_prod === editingProductoId.value)
+      if (idx >= 0) productos.value[idx] = { ...productos.value[idx], ...payload, id_prod: editingProductoId.value } as Producto
+      showToast('Producto actualizado')
+    } else {
+      const res = await $fetch<{ data: Producto }>(`${config.public.apiBase}/products`, { method: 'POST', body: payload })
+      if (res.data) productos.value.unshift(res.data)
+      else await loadData()
+      showToast('Producto creado')
+    }
+    closeModalProducto()
+  } catch (err: any) {
+    showToast(err?.data?.detail || err?.message || 'Error al guardar producto', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ─── MODAL PROVEEDOR ──────────────────────────────────────────
+
+const modalProveedorOpen = ref(false)
+const editingProveedorId = ref<string | null>(null)
+const formProveedor = ref<Partial<Proveedor>>({
+  nombre_provee: '', direccion_provee: '', te_provee: '',
+  email_provee: '', representa_provee: '', cate_provee: '', logo_provee: '', activo_provee: true
+})
+
+function openModalProveedor() {
+  editingProveedorId.value = null
+  formProveedor.value = {
+    nombre_provee: '', direccion_provee: '', te_provee: '',
+    email_provee: '', representa_provee: '', cate_provee: '', logo_provee: '', activo_provee: true
+  }
+  modalProveedorOpen.value = true
+}
+
+function closeModalProveedor() { modalProveedorOpen.value = false; editingProveedorId.value = null }
+
+function editProveedor(p: Proveedor) {
+  editingProveedorId.value = p.id_provee
+  formProveedor.value = { ...p }
+  modalProveedorOpen.value = true
+}
+
+async function saveProveedor() {
+  saving.value = true
+  try {
+    const payload: Record<string, any> = {
+      nombre_provee: formProveedor.value.nombre_provee?.trim(),
+      cate_provee: formProveedor.value.cate_provee?.trim() || null,
+      direccion_provee: formProveedor.value.direccion_provee?.trim() || null,
+      te_provee: formProveedor.value.te_provee?.trim() || null,
+      email_provee: formProveedor.value.email_provee?.trim() || null,
+      representa_provee: formProveedor.value.representa_provee?.trim() || null,
+      logo_provee: formProveedor.value.logo_provee?.trim() || null,
+      activo_provee: !!formProveedor.value.activo_provee,
+      fechaIngreso_provee: new Date().toISOString().split('T')[0]
+    }
+    if (!payload.nombre_provee) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
+    if (editingProveedorId.value) {
+      const res = await $fetch<{ data: Proveedor }>(`${config.public.apiBase}/proveedores/${editingProveedorId.value}`, { method: 'PUT', body: payload })
+      const idx = proveedores.value.findIndex(p => p.id_provee === editingProveedorId.value)
+      if (idx >= 0) proveedores.value[idx] = { ...proveedores.value[idx], ...res.data } as Proveedor
+      showToast('Proveedor actualizado')
+    } else {
+      const res = await $fetch<{ data: Proveedor }>(`${config.public.apiBase}/proveedores`, { method: 'POST', body: payload })
+      if (res.data) proveedores.value.unshift(res.data)
+      else await loadData()
+      showToast('Proveedor creado')
+    }
+    closeModalProveedor()
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'Error al guardar', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ─── DELETE ───────────────────────────────────────────────────
+
+const deleteModalOpen = ref(false)
+const deleteType = ref('')
+const deleteItem = ref<any>(null)
+const deleteItemName = ref('')
+
+function confirmDelete(type: string, item: any) {
+  deleteType.value = type
+  deleteItem.value = item
+  deleteItemName.value = item.nombre_prod || item.nombre_provee || 'elemento'
+  deleteModalOpen.value = true
+}
+
+async function executeDelete() {
+  deleting.value = true
+  try {
+    const item = deleteItem.value
+    if (deleteType.value === 'producto') {
+      await $fetch(`${config.public.apiBase}/products/${item.id_prod}`, { method: 'DELETE' })
+      productos.value = productos.value.filter(p => p.id_prod !== item.id_prod)
+      showToast('Producto eliminado')
+    } else if (deleteType.value === 'proveedor') {
+      try {
+        await $fetch(`${config.public.apiBase}/proveedores/${item.id_provee}`, { method: 'PUT', body: { activo_provee: false } })
+        const idx = proveedores.value.findIndex(p => p.id_provee === item.id_provee)
+        if (idx >= 0) proveedores.value[idx].activo_provee = false
+        showToast('Proveedor desactivado')
+      } catch { showToast('No se pudo eliminar el proveedor', 'error') }
+    }
+  } catch (err: any) {
+    showToast(err?.message || 'Error al eliminar', 'error')
+  } finally {
+    deleting.value = false
+    deleteModalOpen.value = false
+  }
+}
+
+// ─── DATA LOADING ─────────────────────────────────────────────
+
+async function loadOfertas() {
+  loadingOfertas.value = true
+  try {
+    const res = await $fetch<{ count: number; results: Oferta[] }>(`${config.public.apiBase}/ofertas`)
+    ofertas.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando ofertas:', err)
+  } finally {
+    loadingOfertas.value = false
+  }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const [prodRes, provRes] = await Promise.all([
+      $fetch<{ count: number; results: Producto[] }>(`${config.public.apiBase}/products`).catch(() => ({ results: [] })),
+      $fetch<{ count: number; results: Proveedor[] }>(`${config.public.apiBase}/proveedores`).catch(() => ({ results: [] }))
+    ])
+    productos.value = prodRes.results || []
+    proveedores.value = provRes.results || []
+    await loadOfertas()
+  } catch (err) {
+    console.error('Error cargando datos:', err)
+    showToast('Error cargando datos', 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => { loadData() })
+</script>
+
+<style scoped>
+.admin-page {
+  --bg-deep: #0a0a0f;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.06);
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(232, 196, 160, 0.25);
+  --text-primary: #f5f0eb;
+  --text-secondary: rgba(245, 240, 235, 0.6);
+  --text-muted: rgba(245, 240, 235, 0.35);
+  --accent-gold: #e8c4a0;
+  --accent-blue: #60a5fa;
+  --accent-amber: #fbbf24;
+  --accent-emerald: #34d399;
+  --accent-rose: #fb7185;
+  --accent-violet: #a78bfa;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.bg-gradient {
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 196, 160, 0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(167, 139, 250, 0.05), transparent),
+    linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 40%, #0a0a0f 100%);
+  z-index: 0;
+}
+
+.bg-noise {
+  position: fixed; inset: 0; opacity: 0.03; z-index: 1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+.page-content {
+  position: relative; z-index: 2; padding: 1.5rem;
+  display: flex; flex-direction: column; gap: 1.25rem;
+  max-width: 600px; margin: 0 auto; padding-bottom: 6rem;
+}
+
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.animate-fade-in-up { opacity: 0; animation: fadeInUp 0.5s ease-out forwards; }
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+
+/* ─── HEADER ─── */
+.page-header { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; }
+.header-left { display: flex; align-items: center; gap: 0.875rem; }
+.back-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.25s ease; }
+.back-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--border-glow); color: var(--text-primary); transform: scale(1.05); }
+.page-title { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0.15rem 0 0; }
+.refresh-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.25s ease; }
+.refresh-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--border-glow); color: var(--text-primary); }
+.refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+
+/* ─── STATS ─── */
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.875rem; }
+.stat-card { display: flex; align-items: center; gap: 0.875rem; padding: 1.125rem; background: var(--bg-card); backdrop-filter: blur(20px) saturate(180%); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); transition: all 0.3s ease; }
+.stat-card:hover { background: var(--bg-card-hover); border-color: var(--border-glow); transform: translateY(-2px); }
+.stat-icon-wrap { width: 44px; height: 44px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon-blue { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); color: var(--accent-blue); }
+.icon-amber { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.2); color: var(--accent-amber); }
+.icon-emerald { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2); color: var(--accent-emerald); }
+.icon-fire { background: rgba(232,196,160,0.12); border: 1px solid rgba(232,196,160,0.25); color: var(--accent-gold); }
+.stat-info { display: flex; flex-direction: column; gap: 0.2rem; }
+.stat-value { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+.stat-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
+
+/* ─── TABS ─── */
+.tabs-bar { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem; scrollbar-width: none; }
+.tabs-bar::-webkit-scrollbar { display: none; }
+.tab-btn { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.25s ease; white-space: nowrap; flex-shrink: 0; }
+.tab-btn:hover { background: rgba(255,255,255,0.06); border-color: var(--border-glow); color: var(--text-primary); }
+.tab-btn.active { background: linear-gradient(135deg, rgba(232,196,160,0.12), rgba(167,139,250,0.08)); border-color: rgba(232,196,160,0.25); color: var(--accent-gold); }
+.tab-label { font-size: 0.8rem; }
+
+/* ─── SECTION HEADER ─── */
+.section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.section-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
+.section-badge { background: rgba(232,196,160,0.12); color: var(--accent-gold); font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.625rem; border-radius: 999px; border: 1px solid rgba(232,196,160,0.2); }
+
+/* ─── SEARCH ─── */
+.search-box { display: flex; align-items: center; gap: 0.625rem; padding: 0.625rem 1rem; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); flex: 1; max-width: 300px; transition: all 0.25s ease; }
+.search-box:focus-within { border-color: var(--border-glow); box-shadow: 0 0 0 3px rgba(232,196,160,0.06); }
+.search-box svg { color: var(--text-muted); flex-shrink: 0; }
+.search-box input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.9rem; font-family: inherit; }
+.search-box input::placeholder { color: var(--text-muted); }
+
+/* ─── BUTTONS ─── */
+.btn-primary { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1.125rem; background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(167,139,250,0.1)); border: 1px solid rgba(167,139,250,0.3); border-radius: var(--radius-sm); color: #c4b5fd; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.25s ease; white-space: nowrap; }
+.btn-primary:hover { background: linear-gradient(135deg, rgba(167,139,250,0.3), rgba(167,139,250,0.2)); border-color: rgba(167,139,250,0.5); color: #ddd6fe; transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-secondary { padding: 0.625rem 1.125rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.25s ease; }
+.btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: var(--border-glow); color: var(--text-primary); }
+.btn-danger { padding: 0.625rem 1.125rem; background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.3); border-radius: var(--radius-sm); color: #fca5a5; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.25s ease; }
+.btn-danger:hover { background: rgba(248,113,113,0.25); border-color: rgba(248,113,113,0.5); }
+.btn-sm { padding: 0.4rem 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary); font-size: 0.78rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
+.btn-sm:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.btn-sm.danger:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: var(--accent-rose); }
+
+/* ─── ITEMS LIST ─── */
+.items-list { display: flex; flex-direction: column; gap: 0.625rem; }
+
+.item-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.875rem;
+  padding: 0.875rem; background: var(--bg-card); backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  transition: all 0.25s ease;
+  flex-wrap: wrap; /* permite que el panel inline ocupe toda la línea */
+}
+
+.item-card:hover { background: var(--bg-card-hover); border-color: var(--border-glow); }
+.item-card.en-oferta { border-color: rgba(52, 211, 153, 0.2); }
+
+.item-main { display: flex; align-items: center; gap: 0.875rem; flex: 1; min-width: 0; }
+.item-thumb { width: 48px; height: 48px; border-radius: var(--radius-sm); object-fit: cover; background: rgba(255,255,255,0.05); flex-shrink: 0; }
+.item-info { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.item-name-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.item-name { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-meta { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; }
+.item-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+.badge { display: inline-flex; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); border-radius: 6px; font-size: 0.7rem; font-weight: 500; color: var(--text-secondary); }
+.price { color: #4ade80; font-weight: 600; font-size: 0.85rem; }
+
+.item-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+.action-btn { width: 32px; height: 32px; border-radius: 8px; background: transparent; border: none; color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; }
+.action-btn:hover { background: rgba(255,255,255,0.06); }
+.action-btn.edit:hover { color: var(--accent-gold); }
+.action-btn.delete:hover { color: var(--accent-rose); }
+
+/* Toggle oferta */
+.action-btn.oferta-toggle { color: rgba(232,196,160,0.4); }
+.action-btn.oferta-toggle:hover { color: var(--accent-gold); background: rgba(232,196,160,0.08); }
+.action-btn.oferta-toggle.active { color: #34d399; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2); }
+
+/* ─── BADGE MINI OFERTA ─── */
+.oferta-badge-mini {
+  display: inline-flex; align-items: center; padding: 0.12rem 0.45rem;
+  border-radius: 999px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.25);
+  color: #34d399; font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+}
+
+.precio-con-oferta { display: flex !important; align-items: center; gap: 0.375rem; }
+.precio-tachado { text-decoration: line-through; color: rgba(245,240,235,0.3) !important; font-size: 0.78rem !important; font-weight: 400 !important; }
+.precio-nuevo { color: #34d399 !important; font-weight: 700; }
+
+/* ─── PANEL OFERTA INLINE ─── */
+.oferta-panel {
+  width: 100%; /* ocupa toda la fila por el flex-wrap del card */
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: rgba(52,211,153,0.04);
+  border: 1px solid rgba(52,211,153,0.15);
+  border-radius: var(--radius-md);
+}
+
+.oferta-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.82rem; font-weight: 600; color: #34d399;
+  margin-bottom: 0.875rem;
+}
+
+.oferta-panel-header span { display: flex; align-items: center; gap: 0.4rem; }
+
+.oferta-panel-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 0.9rem; cursor: pointer; padding: 0.2rem 0.4rem;
+  border-radius: 6px; transition: all 0.2s;
+}
+.oferta-panel-close:hover { color: var(--accent-rose); background: rgba(248,113,113,0.08); }
+
+.oferta-panel-body { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.oferta-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+.form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+.form-group input, .form-group select, .form-group textarea {
+  padding: 0.55rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); color: #f5f0eb; font-size: 0.88rem; font-family: inherit;
+  outline: none; transition: all 0.2s ease; -webkit-text-fill-color: #f5f0eb;
+}
+.form-group input:focus { border-color: var(--border-glow); box-shadow: 0 0 0 3px rgba(232,196,160,0.06); }
+.form-group input::placeholder { color: rgba(245,240,235,0.35); -webkit-text-fill-color: rgba(245,240,235,0.35); }
+.input-disabled { opacity: 0.45; cursor: not-allowed; }
+
+.descuento-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.7rem;
+  border-radius: 999px; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.25);
+  color: #34d399; font-size: 0.8rem; font-weight: 600;
+}
+
+.oferta-error {
+  padding: 0.45rem 0.7rem; border-radius: 8px;
+  background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2);
+  color: #fca5a5; font-size: 0.8rem;
+}
+
+.oferta-panel-actions { display: flex; gap: 0.625rem; justify-content: flex-end; padding-top: 0.25rem; }
+
+.btn-guardar-oferta {
+  padding: 0.55rem 1rem; background: linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.1));
+  border: 1px solid rgba(52,211,153,0.3); border-radius: var(--radius-sm);
+  color: #6ee7b7; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-guardar-oferta:hover { background: linear-gradient(135deg, rgba(52,211,153,0.3), rgba(52,211,153,0.2)); border-color: rgba(52,211,153,0.5); }
+.btn-guardar-oferta:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-desactivar {
+  padding: 0.55rem 1rem; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2);
+  border-radius: var(--radius-sm); color: #fca5a5; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-desactivar:hover { background: rgba(248,113,113,0.2); border-color: rgba(248,113,113,0.4); }
+.btn-desactivar:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ─── OFERTA CARD (tab ofertas) ─── */
+.oferta-card { border-color: rgba(52,211,153,0.15) !important; }
+.oferta-vence { display: flex !important; align-items: center; gap: 0.3rem; }
+.oferta-vence svg { color: #fbbf24; }
+
+/* ─── PROVIDERS ─── */
+.cards-grid { display: grid; grid-template-columns: 1fr; gap: 0.875rem; }
+.provider-card { background: var(--bg-card); backdrop-filter: blur(20px) saturate(180%); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.25rem; transition: all 0.3s ease; }
+.provider-card:hover { background: var(--bg-card-hover); border-color: var(--border-glow); transform: translateY(-2px); }
+.provider-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
+.provider-logo { width: 48px; height: 48px; border-radius: var(--radius-sm); object-fit: cover; background: rgba(255,255,255,0.05); }
+.provider-status { width: 10px; height: 10px; border-radius: 50%; }
+.provider-status.active { background: var(--accent-emerald); box-shadow: 0 0 8px rgba(52,211,153,0.4); }
+.provider-status.inactive { background: var(--accent-rose); }
+.provider-name { font-size: 1rem; font-weight: 600; margin: 0 0 0.25rem; }
+.provider-cat { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 0.75rem; }
+.provider-meta { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
+.provider-meta span { display: flex; align-items: center; gap: 0.375rem; font-size: 0.78rem; color: var(--text-muted); }
+.provider-actions { display: flex; gap: 0.5rem; }
+
+/* ─── CATEGORIES ─── */
+.categories-grid { grid-template-columns: repeat(2, 1fr); }
+.category-card { background: var(--bg-card); backdrop-filter: blur(20px) saturate(180%); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.25rem; text-align: center; transition: all 0.3s ease; }
+.category-card:hover { background: var(--bg-card-hover); border-color: var(--border-glow); transform: translateY(-2px); }
+.cat-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+.category-card h3 { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem; }
+.category-card p { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.75rem; }
+.cat-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+.cat-bar-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+
+/* ─── EMPTY / LOADING ─── */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 3rem 1rem; text-align: center; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+.empty-icon-wrap { width: 64px; height: 64px; border-radius: var(--radius-lg); background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.empty-state h3 { color: var(--text-primary); font-size: 1.1rem; font-weight: 600; margin: 0; }
+.empty-state p { color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
+.loading-state { display: flex; flex-direction: column; align-items: center; gap: 0.875rem; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+.loading-spinner { width: 32px; height: 32px; border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent-gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+/* ─── MODAL ─── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+.modal-container { background: linear-gradient(180deg, rgba(20,20,28,0.98), rgba(15,15,22,0.98)); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.5); }
+.modal-container.modal-sm { max-width: 380px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem; border-bottom: 1px solid var(--border-subtle); }
+.modal-header h3 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+.modal-close { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; }
+.modal-close:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: var(--accent-rose); }
+.modal-body { padding: 1.25rem; }
+.confirm-text { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 1.25rem; text-align: center; }
+
+/* ─── FORM ─── */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+.form-group input, .form-group select, .form-group textarea { padding: 0.625rem 0.875rem; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: #f5f0eb !important; font-size: 0.9rem; font-family: inherit; outline: none; transition: all 0.25s ease; -webkit-text-fill-color: #f5f0eb !important; }
+.form-group input::placeholder, .form-group textarea::placeholder { color: rgba(245,240,235,0.4) !important; -webkit-text-fill-color: rgba(245,240,235,0.4) !important; }
+.form-group select option { background: #1a1a24; color: #f5f0eb; }
+.form-group input:-webkit-autofill, .form-group select:-webkit-autofill, .form-group textarea:-webkit-autofill { -webkit-text-fill-color: #f5f0eb !important; -webkit-box-shadow: 0 0 0px 1000px #14141c inset !important; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--border-glow); box-shadow: 0 0 0 3px rgba(232,196,160,0.06); }
+.checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem !important; font-weight: 500 !important; }
+.checkbox-label input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-violet); cursor: pointer; }
+.form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
+.mt-2 { margin-top: 0.5rem; }
+
+/* ─── TOAST ─── */
+.toast { position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; align-items: center; gap: 0.625rem; padding: 0.875rem 1.25rem; border-radius: var(--radius-md); font-size: 0.9rem; font-weight: 500; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(20px); max-width: 90vw; }
+.toast.success { background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.25); color: #6ee7b7; }
+.toast.error { background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.25); color: #fca5a5; }
+
+/* ─── BOTTOM BAR ─── */
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; align-items: center; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); background: rgba(10,10,15,0.85); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.08); z-index: 100; }
+.bottom-btn { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; background: none; border: none; color: rgba(245,240,235,0.45); font-size: 0.65rem; font-weight: 500; cursor: pointer; padding: 0.5rem 1rem; border-radius: 12px; transition: all 0.2s; }
+.bottom-btn:hover { color: rgba(245,240,235,0.8); background: rgba(255,255,255,0.05); }
+.bottom-btn--accent { color: #e8c4a0; background: rgba(232,196,160,0.1); border: 1px solid rgba(232,196,160,0.2); }
+.bottom-btn--accent:hover { background: rgba(232,196,160,0.18); }
+
+/* ─── TRANSITIONS ─── */
+.modal-enter-active, .modal-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-from .modal-container, .modal-leave-to .modal-container { transform: scale(0.95) translateY(10px); opacity: 0; }
+.toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+
+.slide-down-enter-active, .slide-down-leave-active { transition: all 0.25s ease; }
+.slide-down-enter-from, .slide-down-leave-to { opacity: 0; transform: translateY(-8px); }
+
+/* ─── RESPONSIVE ─── */
+@media (min-width: 640px) {
+  .page-content { max-width: 640px; padding: 2rem; gap: 1.5rem; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+  .cards-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .page-content { padding: 1rem; gap: 1rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 0.625rem; }
+  .stat-card { padding: 0.875rem; }
+  .section-header { flex-direction: column; align-items: stretch; }
+  .search-box { max-width: none; }
+  .form-grid { grid-template-columns: 1fr; }
+  .categories-grid { grid-template-columns: 1fr; }
+  .oferta-panel-grid { grid-template-columns: 1fr; }
+}
+</style>

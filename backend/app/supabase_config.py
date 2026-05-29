@@ -102,6 +102,13 @@ class SupabaseConfig:
         """Verifica si está en modo debug"""
         return os.getenv('DEBUG', str(cls.DEBUG)).lower() == 'true'
 
+    @classmethod
+    def get_service_key(cls) -> str:
+        key = os.getenv('SUPABASE_SERVICE_KEY')
+        if not key or not key.startswith('eyJ'):
+            return cls.get_anon_key()
+        return key
+
 # Configuración de tablas
 class TableConfig:
     """Configuración de nombres de tablas"""

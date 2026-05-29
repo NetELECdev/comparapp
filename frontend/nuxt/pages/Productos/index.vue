@@ -19,6 +19,32 @@
         </div>
       </header>
 
+      <!-- BARRA DE BÚSQUEDA -->
+      <div class="search-wrapper animate-fade-in-up stagger-1" ref="searchWrapperRef">
+        <div class="search-bar" :class="{ 'search-focused': searchFocused }">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.3-4.3"/>
+          </svg>
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="text"
+            placeholder="Buscar producto..."
+            class="search-input"
+            @focus="searchFocused = true"
+            @blur="searchFocused = false"
+            @keydown.esc="searchQuery = ''"
+            autocomplete="off"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- BARRA DE ORDENAMIENTO -->
       <div class="sort-bar animate-fade-in-up stagger-1">
         <div class="sort-label">
@@ -44,18 +70,58 @@
         </div>
       </div>
 
+      <!-- RESULTADOS -->
+      <div class="results-header animate-fade-in-up stagger-2">
+        <div class="results-count">
+          <span v-if="searchQuery.length >= minChars">
+            {{ productosFiltrados.length }} resultado{{ productosFiltrados.length !== 1 ? 's' : '' }} para "{{ searchQuery }}"
+          </span>
+          <span v-else>
+            {{ productos.length }} productos disponibles
+          </span>
+        </div>
+        <!-- ❌ ELIMINADO: badgesComparativos sin sentido -->
+      </div>
+
       <!-- LISTA DE PRODUCTOS -->
       <div v-if="loading" class="loading-state animate-fade-in-up">
         <div class="loading-spinner" />
         <p>Cargando productos...</p>
       </div>
 
+      <!-- AGRUPADO POR PROVEEDOR -->
+      <template v-else-if="sortBy === 'proveedor' && productosAgrupadosPorProveedor">
+        <div
+          v-for="(grupo, proveedor) in productosAgrupadosPorProveedor"
+          :key="proveedor"
+          class="proveedor-grupo animate-fade-in-up stagger-2"
+        >
+          <div class="proveedor-header">
+            <span class="proveedor-nombre-header">🏪 {{ proveedor }}</span>
+            <span class="proveedor-count">{{ grupo.length }} producto{{ grupo.length !== 1 ? 's' : '' }}</span>
+          </div>
+          <div class="proveedor-items">
+            <ProductRow
+              v-for="producto in grupo"
+              :key="producto.id_prod"
+              :product="producto"
+              :comparacion="comparacionMap[producto.id_prod]"
+              @click="openProductDetail(producto)"
+              @compare="agregarAComparacion"
+            />
+          </div>
+        </div>
+      </template>
+
+      <!-- LISTA NORMAL -->
       <div v-else-if="productosOrdenados.length > 0" class="productos-lista animate-fade-in-up stagger-2">
         <ProductRow
           v-for="(producto, index) in productosOrdenados"
           :key="producto.id_prod"
           :product="producto"
+          :comparacion="comparacionMap[producto.id_prod]"
           :class="'stagger-' + Math.min(index + 3, 8)"
+          @click="openProductDetail(producto)"
           @compare="agregarAComparacion"
         />
       </div>
@@ -63,17 +129,33 @@
       <div v-else class="empty-state animate-fade-in-up">
         <div class="empty-icon-wrap">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.3-4.3"/>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
           </svg>
         </div>
         <h3>No se encontraron productos</h3>
-        <p>Intentá más tarde</p>
+        <p v-if="searchQuery.length >= minChars">
+          Intentá con otro término de búsqueda
+        </p>
+        <p v-else>
+          No hay productos disponibles
+        </p>
+        <button v-if="searchQuery.length >= minChars" class="back-btn-text" @click="searchQuery = ''">
+          Ver todos los productos
+        </button>
       </div>
 
     </main>
 
-    <!-- BARRA DE COMPARACIÓN FLOTANTE (fuera del flujo, fija en pantalla) -->
+    <!-- MODAL DE DETALLE DE PRODUCTO -->
+    <ProductDetailModal
+      v-if="selectedProduct"
+      :product="selectedProduct"
+      :comparacion="comparacionMap[selectedProduct.id_prod]"
+      @close="selectedProduct = null"
+      @compare="agregarAComparacion"
+    />
+
+    <!-- BARRA DE COMPARACIÓN FLOTANTE -->
     <Transition name="slide-up">
       <div v-if="comparacion.length > 0" class="compare-float">
         <div class="compare-info">
@@ -102,8 +184,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRuntimeConfig, navigateTo } from '#app'
+import { navigateTo } from '#app'
 import ProductRow from '~/components/ProductRow.vue'
+import ProductDetailModal from '~/components/ProductDetailModal.vue'
 
 interface Producto {
   id_prod: string
@@ -121,11 +204,26 @@ interface ComparacionItem extends Producto {
   cantidad: number
 }
 
-const config = useRuntimeConfig()
+interface ComparacionData {
+  esMasBarato: boolean
+  esMasCaro: boolean
+  pctVsMin: number
+  totalCompetidores: number
+}
+
 const loading = ref(true)
 const productos = ref<Producto[]>([])
 const comparacion = ref<ComparacionItem[]>([])
 const sortBy = ref('nombre')
+const selectedProduct = ref<Producto | null>(null)
+
+const searchQuery = ref('')
+const searchFocused = ref(false)
+const searchInputRef = ref<HTMLInputElement>()
+const searchWrapperRef = ref<HTMLElement>()
+const minChars = 2
+
+const userLocation = ref<{ lat: number; lng: number } | null>(null)
 
 const sortOptions = [
   { label: 'Nombre', value: 'nombre' },
@@ -133,36 +231,125 @@ const sortOptions = [
   { label: 'Precio ↑', value: 'precio_desc' },
   { label: 'Categoría', value: 'categoria' },
   { label: 'Marca', value: 'marca' },
+  { label: 'Proveedor', value: 'proveedor' },
 ]
 
+// ─── FILTRADO POR BÚSQUEDA ───
+const productosFiltrados = computed(() => {
+  if (searchQuery.value.length < minChars) {
+    return productos.value
+  }
+
+  const q = searchQuery.value.toLowerCase().trim()
+  return productos.value.filter(p =>
+    p.nombre_prod.toLowerCase().includes(q) ||
+    p.marca_prod.toLowerCase().includes(q) ||
+    p.provee_prod.toLowerCase().includes(q) ||
+    p.cate_prod.toLowerCase().includes(q)
+  )
+})
+
+// ─── ORDENAMIENTO (sobre filtrados) ───
 const productosOrdenados = computed(() => {
-  const sorted = [...productos.value]
+  const list = [...productosFiltrados.value]
+
   switch (sortBy.value) {
     case 'nombre':
-      return sorted.sort((a, b) => a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+      return list.sort((a, b) => a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     case 'precio_asc':
-      return sorted.sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+      return list.sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
     case 'precio_desc':
-      return sorted.sort((a, b) => Number(b.precio_prod) - Number(a.precio_prod))
+      return list.sort((a, b) => Number(b.precio_prod) - Number(a.precio_prod))
     case 'categoria':
-      return sorted.sort((a, b) => a.cate_prod.localeCompare(b.cate_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+      return list.sort((a, b) => a.cate_prod.localeCompare(b.cate_prod, 'es'))
     case 'marca':
-      return sorted.sort((a, b) => a.marca_prod.localeCompare(b.marca_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+      return list.sort((a, b) => a.marca_prod.localeCompare(b.marca_prod, 'es'))
+    case 'proveedor':
+      return list.sort((a, b) => a.provee_prod.localeCompare(b.provee_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     default:
-      return sorted
+      return list
   }
 })
 
+// ─── ✅ NUEVO: MAPA DE COMPARACIONES (reemplaza badgesComparativos) ───
+const comparacionMap = computed((): Record<string, ComparacionData> => {
+  const map: Record<string, ComparacionData> = {}
+
+  // Agrupar por nombre
+  const porNombre: Record<string, Producto[]> = {}
+  for (const p of productosFiltrados.value) {
+    if (!porNombre[p.nombre_prod]) porNombre[p.nombre_prod] = []
+    porNombre[p.nombre_prod].push(p)
+  }
+
+  // Calcular comparación para cada producto
+  for (const p of productosFiltrados.value) {
+    const grupo = porNombre[p.nombre_prod] || [p]
+    const precios = grupo.map(x => Number(x.precio_prod))
+    const minPrecio = Math.min(...precios)
+    const maxPrecio = Math.max(...precios)
+    const precioActual = Number(p.precio_prod)
+
+    if (grupo.length > 1) {
+      const pctVsMin = minPrecio > 0 && precioActual > minPrecio
+        ? Math.round(((precioActual - minPrecio) / minPrecio) * 100)
+        : 0
+
+      map[p.id_prod] = {
+        esMasBarato: Math.abs(precioActual - minPrecio) < 0.01,
+        esMasCaro: Math.abs(precioActual - maxPrecio) < 0.01,
+        pctVsMin,
+        totalCompetidores: grupo.length
+      }
+    } else {
+      map[p.id_prod] = {
+        esMasBarato: true,
+        esMasCaro: true,
+        pctVsMin: 0,
+        totalCompetidores: 1
+      }
+    }
+  }
+
+  return map
+})
+
+// ─── AGRUPADO POR PROVEEDOR ───
+const productosAgrupadosPorProveedor = computed(() => {
+  if (sortBy.value !== 'proveedor') return null
+  const grupos: Record<string, Producto[]> = {}
+  for (const p of productosFiltrados.value) {
+    const key = p.provee_prod || 'Sin proveedor'
+    if (!grupos[key]) grupos[key] = []
+    grupos[key].push(p)
+  }
+  for (const key in grupos) {
+    grupos[key].sort((a, b) => a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+  }
+  return grupos
+})
+
+// ─── ✅ NUEVO: Abrir modal de detalle ───
+function openProductDetail(producto: Producto) {
+  selectedProduct.value = producto
+}
+
 onMounted(async () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => { userLocation.value = { lat: pos.coords.latitude, lng: pos.coords.longitude } },
+      () => {}
+    )
+  }
+
   const storedComp = localStorage.getItem('comparapp_comparacion')
   if (storedComp) {
     try { comparacion.value = JSON.parse(storedComp) } catch {}
   }
 
   try {
-    const res = await $fetch<{ count: number; results: Producto[] }>(
-      `${config.public.apiBase}/products`
-    )
+    const { api } = useApi()
+    const res = await api<{ count: number; results: Producto[] }>('/products')
     productos.value = res.results || []
   } catch (err) {
     console.error('Error cargando productos:', err)
@@ -257,7 +444,7 @@ const irAComparar = () => {
   gap: 1.25rem;
   max-width: 600px;
   margin: 0 auto;
-  padding-bottom: 6rem; /* espacio para el botón flotante */
+  padding-bottom: 6rem;
 }
 
 @keyframes fadeInUp {
@@ -333,6 +520,51 @@ const irAComparar = () => {
   margin: 0.15rem 0 0;
 }
 
+/* ─── SEARCH ─── */
+.search-wrapper { position: relative; z-index: 50; }
+.search-bar {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: all 0.3s ease;
+}
+.search-bar.search-focused {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 0 3px rgba(232,196,160,0.08);
+  background: rgba(255,255,255,0.05);
+}
+.search-icon { color: var(--text-muted); flex-shrink: 0; }
+.search-bar.search-focused .search-icon { color: var(--accent-gold); }
+.search-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 0.95rem; font-family: inherit;
+}
+.search-input::placeholder { color: var(--text-muted); }
+.search-clear {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+  color: var(--text-muted); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; transition: all 0.2s;
+}
+.search-clear:hover { background: rgba(251,113,133,0.1); border-color: rgba(251,113,133,0.3); color: #fb7185; }
+
+/* ─── RESULTS HEADER ─── */
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.results-count {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 /* ─── SORT BAR ─── */
 .sort-bar {
   display: flex;
@@ -386,6 +618,40 @@ const irAComparar = () => {
   border-color: rgba(232, 196, 160, 0.3);
   color: var(--accent-gold);
   box-shadow: 0 0 15px rgba(232, 196, 160, 0.1);
+}
+
+/* ─── PROVEEDOR GRUPO ─── */
+.proveedor-grupo {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.proveedor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(167,139,250,0.04));
+  border-bottom: 1px solid rgba(167,139,250,0.12);
+}
+.proveedor-nombre-header {
+  color: #c4b5fd;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.proveedor-count {
+  color: rgba(167,139,250,0.6);
+  font-size: 0.75rem;
+}
+.proveedor-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.5rem;
+  gap: 0.5rem;
 }
 
 /* ─── LOADING ─── */
@@ -450,7 +716,26 @@ const irAComparar = () => {
   margin: 0;
 }
 
-/* ─── COMPARE FLOAT (fijo, centrado en la parte inferior) ─── */
+.back-btn-text {
+  margin-top: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.back-btn-text:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-glow);
+  color: var(--text-primary);
+}
+
+/* ─── COMPARE FLOAT ─── */
 .compare-float {
   position: fixed;
   bottom: 1.25rem;

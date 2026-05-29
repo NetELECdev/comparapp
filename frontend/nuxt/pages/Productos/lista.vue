@@ -19,8 +19,8 @@
         </div>
       </header>
 
-      <!-- 🔍 BARRA DE BÚSQUEDA CON SUGERENCIAS -->
-      <div class="search-wrapper animate-fade-in-up stagger-1" ref="searchWrapperRef">
+      <!-- BARRA DE BÚSQUEDA -->
+      <div class="search-wrapper animate-fade-in-up stagger-1">
         <div class="search-bar" :class="{ 'search-focused': searchFocused, 'search-has-value': searchQuery.length > 0 }">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"/>
@@ -34,115 +34,37 @@
             class="search-input"
             @focus="onSearchFocus"
             @blur="onSearchBlur"
-            @keydown.down.prevent="navigateSuggestions(1)"
-            @keydown.up.prevent="navigateSuggestions(-1)"
             @keydown.enter.prevent="applySearch"
             @keydown.esc="closeSuggestions"
             autocomplete="off"
           />
-          <button
-            v-if="searchQuery"
-            class="search-clear"
-            @click="clearSearch"
-            aria-label="Limpiar búsqueda"
-          >
+          <button v-if="searchQuery" class="search-clear" @click="clearSearch" aria-label="Limpiar búsqueda">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 6 6 18"/>
               <path d="m6 6 12 12"/>
             </svg>
           </button>
         </div>
-
-        <!-- Dropdown de sugerencias -->
-        <Transition name="suggestions">
-          <div v-if="showSuggestions" class="suggestions-dropdown">
-            <!-- Estado de carga -->
-            <div v-if="searchLoading" class="suggestions-loading">
-              <div class="loading-spinner loading-spinner--sm" />
-              <span>Buscando...</span>
-            </div>
-
-            <!-- Sin resultados -->
-            <div v-else-if="suggestions.length === 0 && searchQuery.length >= minChars" class="suggestions-empty">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.3-4.3"/>
-              </svg>
-              <span>No se encontraron productos</span>
-            </div>
-
-            <!-- Lista de sugerencias -->
-            <ul v-else-if="suggestions.length > 0" class="suggestions-list">
-              <li
-                v-for="(item, index) in suggestions"
-                :key="item.id_prod"
-                class="suggestion-item"
-                :class="{ highlighted: highlightedIndex === index }"
-                @mousedown.prevent="selectSuggestion(item)"
-                @mouseenter="highlightedIndex = index"
-              >
-                <div class="suggestion-img">
-                  <img :src="item.imagen_prod || '/images/avatar_default.png'" />
-                </div>
-                <div class="suggestion-info">
-                  <span class="suggestion-name" v-html="highlightMatch(item.nombre_prod)"></span>
-                  <span class="suggestion-meta">{{ item.marca_prod }} · ${{ formatPrice(item.precio_prod) }}</span>
-                </div>
-                <svg class="suggestion-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="m9 18 6-6-6-6"/>
-                </svg>
-              </li>
-            </ul>
-
-            <!-- Historial de búsquedas recientes -->
-            <div v-if="recentSearches.length > 0 && !searchQuery" class="suggestions-section">
-              <div class="suggestions-section-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 3v5h5"/>
-                  <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/>
-                </svg>
-                Búsquedas recientes
-              </div>
-              <ul class="suggestions-list">
-                <li
-                  v-for="(term, index) in recentSearches"
-                  :key="term"
-                  class="suggestion-item suggestion-history"
-                  :class="{ highlighted: highlightedIndex === index }"
-                  @mousedown.prevent="searchFromHistory(term)"
-                  @mouseenter="highlightedIndex = index"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="m21 21-4.3-4.3"/>
-                  </svg>
-                  <span class="suggestion-name">{{ term }}</span>
-                  <button
-                    class="history-remove"
-                    @mousedown.stop.prevent="removeFromHistory(term)"
-                    aria-label="Eliminar del historial"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M18 6 6 18"/>
-                      <path d="m6 6 12 12"/>
-                    </svg>
-                  </button>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </Transition>
       </div>
 
-      <!-- RESULTADOS DE BÚSQUEDA / LISTA PRINCIPAL -->
+      <!-- RESULTADOS -->
       <div class="results-header animate-fade-in-up stagger-2">
         <div class="results-count">
           <span v-if="searchQuery.length >= minChars">
-            {{ productosFiltrados.length }} resultado{{ productosFiltrados.length !== 1 ? 's' : '' }} para "{{ searchQuery }}"
+            {{ productos.length }} resultado{{ productos.length !== 1 ? 's' : '' }} para "{{ searchQuery }}"
+          </span>
+          <span v-else-if="searchQuery.length > 0">
+            Escribí al menos {{ minChars }} caracteres...
           </span>
           <span v-else>
             {{ productos.length }} productos disponibles
           </span>
+        </div>
+        <div v-if="gruposConCompetencia > 0" class="competencia-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>
+          </svg>
+          {{ gruposConCompetencia }} con comparación
         </div>
       </div>
 
@@ -177,6 +99,50 @@
         <p>Cargando productos...</p>
       </div>
 
+      <!-- GRUPOS POR NOMBRE (búsqueda activa) -->
+      <template v-else-if="searchQuery.length >= minChars && productosAgrupadosPorNombre && Object.keys(productosAgrupadosPorNombre).length > 0">
+        <div
+          v-for="(grupo, nombre) in productosAgrupadosPorNombre"
+          :key="nombre"
+          class="nombre-grupo animate-fade-in-up"
+          :class="{ 'tiene-competencia': grupo.length > 1 }"
+        >
+          <div v-if="grupo.length > 1" class="grupo-header">
+            <span class="grupo-nombre">{{ nombre }}</span>
+            <div class="grupo-stats">
+              <span class="grupo-stat stat-min">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                Mín: ${{ formatPrice(grupoStats[nombre]?.min) }}
+              </span>
+              <span class="grupo-stat stat-max">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                Máx: ${{ formatPrice(grupoStats[nombre]?.max) }}
+              </span>
+              <span class="grupo-stat stat-diff" v-if="grupoStats[nombre]?.diff > 0">
+                Dif: {{ grupoStats[nombre]?.diffPct }}%
+              </span>
+            </div>
+          </div>
+
+          <div class="grupo-items">
+            <ProductRow
+              v-for="producto in grupo"
+              :key="producto.id_prod"
+              :product="producto"
+              :comparacion="grupo.length > 1 ? {
+                esMasBarato: producto.es_mas_barato,
+                esMasCaro: producto.es_mas_caro,
+                pctVsMin: producto.pct_vs_min,
+                totalCompetidores: producto.total_competidores
+              } : undefined"
+              @compare="agregarAComparacion"
+              @click="irADetalle(producto.id_prod)"
+            />
+          </div>
+        </div>
+      </template>
+
+      <!-- Lista normal (sin búsqueda o sin resultados agrupados) -->
       <div v-else-if="productosOrdenados.length > 0" class="productos-lista animate-fade-in-up stagger-3">
         <ProductRow
           v-for="(producto, index) in productosOrdenados"
@@ -184,28 +150,21 @@
           :product="producto"
           :class="'stagger-' + Math.min(index + 4, 8)"
           @compare="agregarAComparacion"
+          @click="irADetalle(producto.id_prod)"
         />
       </div>
 
       <div v-else class="empty-state animate-fade-in-up">
         <div class="empty-icon-wrap">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.3-4.3"/>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
           </svg>
         </div>
         <h3>No se encontraron productos</h3>
-        <p v-if="searchQuery.length >= minChars">
-          Intentá con otro término de búsqueda
-        </p>
-        <p v-else>
-          No hay productos disponibles
-        </p>
-        <button v-if="searchQuery.length >= minChars" class="back-btn-text" @click="clearSearch">
-          Ver todos los productos
-        </button>
+        <p v-if="searchQuery.length >= minChars">Intentá con otro término de búsqueda</p>
+        <p v-else>No hay productos disponibles</p>
+        <button v-if="searchQuery.length >= minChars" class="back-btn-text" @click="clearSearch">Ver todos los productos</button>
       </div>
-
     </main>
 
     <!-- BARRA DE COMPARACIÓN FLOTANTE -->
@@ -236,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRuntimeConfig, navigateTo } from '#app'
 import ProductRow from '~/components/ProductRow.vue'
 
@@ -245,13 +204,19 @@ interface Producto {
   id_prod: string
   nombre_prod: string
   marca_prod: string
-  precio_prod: string
+  precio_prod: number | string
   cate_prod: string
   imagen_prod: string | null
   provee_prod: string
   fecha_prod?: string
   activo_prod: boolean
   describe_prod?: string
+  pct_vs_min?: number
+  es_mas_barato?: boolean
+  es_mas_caro?: boolean
+  total_competidores?: number
+  precio_min_grupo?: number
+  precio_max_grupo?: number
 }
 
 interface ComparacionItem extends Producto {
@@ -266,20 +231,11 @@ const loading = ref(true)
 const productos = ref<Producto[]>([])
 const comparacion = ref<ComparacionItem[]>([])
 const sortBy = ref('nombre')
-
-// 🔍 Estado de búsqueda
 const searchQuery = ref('')
 const searchFocused = ref(false)
-const searchLoading = ref(false)
-const suggestions = ref<Producto[]>([])
-const highlightedIndex = ref(-1)
 const searchInputRef = ref<HTMLInputElement>()
-const searchWrapperRef = ref<HTMLElement>()
-const recentSearches = ref<string[]>([])
 
 // ─── Constantes ───
-const RECENT_SEARCHES_KEY = 'comparapp_recent_searches'
-const MAX_RECENT = 8
 const DEBOUNCE_MS = 300
 const minChars = 3
 
@@ -294,34 +250,63 @@ const sortOptions = [
   { label: 'Marca', value: 'marca' },
 ]
 
+// ─── API helper con prefix correcto ───
+async function api<T>(endpoint: string, opts?: any): Promise<T> {
+  const base = config.public.apiBase || ''
+  const url = endpoint.startsWith('/api/v1/') ? endpoint : `/api/v1${endpoint}`
+  const fullUrl = `${base}${url}`
+  const res = await $fetch<T>(fullUrl, opts)
+  return res
+}
+
 // ─── Computed ───
-const showSuggestions = computed(() => {
-  return searchFocused.value && (
-    searchQuery.value.length >= minChars ||
-    (!searchQuery.value && recentSearches.value.length > 0)
-  )
-})
+const productosAgrupadosPorNombre = computed(() => {
+  if (searchQuery.value.length < minChars || productos.value.length === 0) return null
 
-// Productos filtrados por búsqueda
-const productosFiltrados = computed(() => {
-  if (searchQuery.value.length < minChars) {
-    return productos.value
+  const grupos: Record<string, Producto[]> = {}
+  for (const p of productos.value) {
+    const key = p.nombre_prod
+    if (!grupos[key]) grupos[key] = []
+    grupos[key].push(p)
   }
-  
-  const q = searchQuery.value.toLowerCase().trim()
-  return productos.value.filter(p =>
-    p.nombre_prod.toLowerCase().includes(q) ||
-    p.marca_prod.toLowerCase().includes(q) ||
-    (p.describe_prod && p.describe_prod.toLowerCase().includes(q)) ||
-    p.provee_prod.toLowerCase().includes(q) ||
-    p.cate_prod.toLowerCase().includes(q)
-  )
+
+  for (const key in grupos) {
+    grupos[key].sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+  }
+
+  return grupos
 })
 
-// Productos ordenados (sobre los filtrados)
-const productosOrdenados = computed(() => {
-  const list = [...productosFiltrados.value]
+const grupoStats = computed(() => {
+  const stats: Record<string, { min: number; max: number; diff: number; diffPct: number }> = {}
+  if (!productosAgrupadosPorNombre.value) return stats
 
+  for (const [nombre, grupo] of Object.entries(productosAgrupadosPorNombre.value)) {
+    if (grupo.length > 1) {
+      const precios = grupo.map(p => Number(p.precio_prod))
+      const min = Math.min(...precios)
+      const max = Math.max(...precios)
+      stats[nombre] = {
+        min,
+        max,
+        diff: max - min,
+        diffPct: min > 0 ? Math.round(((max - min) / min) * 100) : 0
+      }
+    }
+  }
+  return stats
+})
+
+const gruposConCompetencia = computed(() => {
+  let count = 0
+  for (const grupo of Object.values(grupoStats.value)) {
+    if (grupo.diff > 0) count++
+  }
+  return count
+})
+
+const productosOrdenados = computed(() => {
+  const list = [...productos.value]
   switch (sortBy.value) {
     case 'nombre':
       return list.sort((a, b) => a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
@@ -333,7 +318,7 @@ const productosOrdenados = computed(() => {
       return list.sort((a, b) => {
         const dateA = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
         const dateB = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
-        return dateB - dateA // Más reciente primero
+        return dateB - dateA
       })
     case 'proveedor':
       return list.sort((a, b) => a.provee_prod.localeCompare(b.provee_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
@@ -346,158 +331,86 @@ const productosOrdenados = computed(() => {
   }
 })
 
-// ─── Debounce para sugerencias ───
+// ─── Debounce para búsqueda ───
 let debounceTimer: ReturnType<typeof setTimeout>
 
 watch(searchQuery, (newVal) => {
-  highlightedIndex.value = -1
-  
   if (newVal.length >= minChars) {
-    searchLoading.value = true
     clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
-      fetchSuggestions(newVal)
+      fetchSearchResults(newVal)
     }, DEBOUNCE_MS)
-  } else {
-    suggestions.value = []
-    searchLoading.value = false
+  } else if (newVal.length === 0) {
+    cargarTodosLosProductos()
   }
 })
 
-// ─── Métodos de búsqueda ───
-async function fetchSuggestions(query: string) {
+// ─── Métodos ───
+async function fetchSearchResults(query: string) {
+  loading.value = true
   try {
-    const res = await $fetch<{ count: number; results: Producto[] }>(
-      `${config.public.apiBase}/products?q=${encodeURIComponent(query)}&limit=8`
+    const res = await api<{ count: number; query: string; results: Producto[] }>(
+      `/products/search?q=${encodeURIComponent(query)}&limit=50`
     )
-
-    if (res.results && res.results.length > 0) {
-      suggestions.value = res.results.slice(0, 8)
-    } else {
-      // Fallback local
-      const q = query.toLowerCase()
-      suggestions.value = productos.value
-        .filter(p =>
-          p.nombre_prod.toLowerCase().includes(q) ||
-          p.marca_prod.toLowerCase().includes(q)
-        )
-        .slice(0, 8)
-    }
+    console.log('Resultados búsqueda:', res)
+    productos.value = res.results || []
   } catch (err) {
-    console.error('Error buscando sugerencias:', err)
-    // Fallback local
-    const q = query.toLowerCase()
-    suggestions.value = productos.value
-      .filter(p =>
-        p.nombre_prod.toLowerCase().includes(q) ||
-        p.marca_prod.toLowerCase().includes(q)
-      )
-      .slice(0, 8)
+    console.error('Error buscando:', err)
+    productos.value = []
   } finally {
-    searchLoading.value = false
+    loading.value = false
   }
 }
 
-// Al tocar Enter o una sugerencia → aplica el filtro a la lista
+async function cargarTodosLosProductos() {
+  loading.value = true
+  try {
+    const res = await api<{ count: number; results: Producto[] }>('/products?limit=100')
+    productos.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando productos:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
 function applySearch() {
-  if (highlightedIndex.value >= 0 && suggestions.value[highlightedIndex.value]) {
-    // Si hay una sugerencia resaltada, usa ese producto
-    searchQuery.value = suggestions.value[highlightedIndex.value].nombre_prod
+  if (searchQuery.value.length >= minChars) {
+    fetchSearchResults(searchQuery.value)
   }
-  saveToHistory(searchQuery.value)
-  closeSuggestions()
+  searchFocused.value = false
   searchInputRef.value?.blur()
-}
-
-// Al hacer click en una sugerencia
-function selectSuggestion(item: Producto) {
-  searchQuery.value = item.nombre_prod
-  saveToHistory(item.nombre_prod)
-  closeSuggestions()
 }
 
 function onSearchFocus() {
   searchFocused.value = true
-  loadRecentSearches()
 }
 
 function onSearchBlur() {
   setTimeout(() => {
     searchFocused.value = false
-    highlightedIndex.value = -1
   }, 200)
 }
 
 function closeSuggestions() {
   searchFocused.value = false
-  highlightedIndex.value = -1
   searchInputRef.value?.blur()
 }
 
 function clearSearch() {
   searchQuery.value = ''
-  suggestions.value = []
-  highlightedIndex.value = -1
-  searchInputRef.value?.focus()
+  productos.value = []
+  cargarTodosLosProductos()
 }
 
-function navigateSuggestions(direction: number) {
-  const max = searchQuery.value
-    ? suggestions.value.length
-    : recentSearches.value.length
-
-  if (max === 0) return
-
-  highlightedIndex.value += direction
-
-  if (highlightedIndex.value < 0) highlightedIndex.value = max - 1
-  if (highlightedIndex.value >= max) highlightedIndex.value = 0
+function formatPrice(price: string | number | null | undefined): string {
+  if (price === null || price === undefined) return '0'
+  return Number(price).toLocaleString('es-AR')
 }
 
-function formatPrice(price: string | number): string {
-  return Number(price)?.toLocaleString('es-AR') || '0'
-}
-
-// ─── Historial ───
-function loadRecentSearches() {
-  try {
-    const stored = localStorage.getItem(RECENT_SEARCHES_KEY)
-    if (stored) {
-      recentSearches.value = JSON.parse(stored)
-    }
-  } catch {}
-}
-
-function saveToHistory(term: string) {
-  if (!term || term.length < minChars) return
-  const normalized = term.trim().toLowerCase()
-  recentSearches.value = [
-    normalized,
-    ...recentSearches.value.filter(t => t !== normalized)
-  ].slice(0, MAX_RECENT)
-  localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recentSearches.value))
-}
-
-function searchFromHistory(term: string) {
-  searchQuery.value = term
-  saveToHistory(term)
-  nextTick(() => searchInputRef.value?.focus())
-}
-
-function removeFromHistory(term: string) {
-  recentSearches.value = recentSearches.value.filter(t => t !== term)
-  localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recentSearches.value))
-}
-
-// ─── Highlight de texto coincidente ───
-function highlightMatch(text: string): string {
-  if (!searchQuery.value) return text
-  const regex = new RegExp(`(${escapeRegex(searchQuery.value)})`, 'gi')
-  return text.replace(regex, '<mark>$1</mark>')
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+async function irADetalle(id: string) {
+  console.log('Navegando a detalle:', id)
+  await navigateTo(`/productos/${id}`)
 }
 
 // ─── Comparación ───
@@ -532,26 +445,11 @@ const irAComparar = () => {
 
 // ─── Lifecycle ───
 onMounted(async () => {
-  // Cargar comparación previa
   const storedComp = localStorage.getItem('comparapp_comparacion')
   if (storedComp) {
     try { comparacion.value = JSON.parse(storedComp) } catch {}
   }
-
-  // Cargar productos
-  try {
-    const res = await $fetch<{ count: number; results: Producto[] }>(
-      `${config.public.apiBase}/products`
-    )
-    productos.value = res.results || []
-  } catch (err) {
-    console.error('Error cargando productos:', err)
-  } finally {
-    loading.value = false
-  }
-
-  // Cargar historial
-  loadRecentSearches()
+  await cargarTodosLosProductos()
 })
 </script>
 
@@ -637,7 +535,6 @@ onMounted(async () => {
 .stagger-7 { animation-delay: 0.35s; }
 .stagger-8 { animation-delay: 0.4s; }
 
-/* ─── HEADER ─── */
 .page-header {
   display: flex;
   align-items: center;
@@ -687,7 +584,6 @@ onMounted(async () => {
   margin: 0.15rem 0 0;
 }
 
-/* ─── 🔍 SEARCH BAR ─── */
 .search-wrapper {
   position: relative;
   z-index: 50;
@@ -763,188 +659,6 @@ onMounted(async () => {
   color: #fb7185;
 }
 
-/* ─── SUGGESTIONS DROPDOWN ─── */
-.suggestions-dropdown {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  right: 0;
-  background: rgba(15, 15, 20, 0.95);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 24px rgba(232, 196, 160, 0.05);
-  overflow: hidden;
-  max-height: 420px;
-  overflow-y: auto;
-}
-
-.suggestions-enter-active,
-.suggestions-leave-active {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.suggestions-enter-from,
-.suggestions-leave-to {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.98);
-}
-
-.suggestions-loading,
-.suggestions-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.625rem;
-  padding: 1.25rem;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.suggestions-section {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.suggestions-section:first-child {
-  border-top: none;
-}
-
-.suggestions-section-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem 0.5rem;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.suggestions-list {
-  list-style: none;
-  margin: 0;
-  padding: 0.25rem;
-}
-
-.suggestion-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 0.875rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  margin: 0.125rem 0;
-}
-
-.suggestion-item:hover,
-.suggestion-item.highlighted {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.suggestion-item.highlighted {
-  background: rgba(232, 196, 160, 0.08);
-  border: 1px solid rgba(232, 196, 160, 0.15);
-}
-
-.suggestion-img {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
-}
-
-.suggestion-img img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.suggestion-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.suggestion-name {
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.suggestion-name :deep(mark) {
-  background: rgba(232, 196, 160, 0.25);
-  color: var(--accent-gold);
-  border-radius: 2px;
-  padding: 0 2px;
-  font-weight: 600;
-}
-
-.suggestion-meta {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.suggestion-arrow {
-  color: var(--text-muted);
-  opacity: 0;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.suggestion-item:hover .suggestion-arrow,
-.suggestion-item.highlighted .suggestion-arrow {
-  opacity: 1;
-  color: var(--accent-gold);
-  transform: translateX(2px);
-}
-
-/* Historial */
-.suggestion-history {
-  gap: 0.625rem;
-}
-
-.suggestion-history svg:first-child {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.history-remove {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s ease;
-  margin-left: auto;
-}
-
-.suggestion-item:hover .history-remove,
-.suggestion-item.highlighted .history-remove {
-  opacity: 1;
-}
-
-.history-remove:hover {
-  background: rgba(251, 113, 133, 0.15);
-  color: #fb7185;
-}
-
-/* ─── RESULTS HEADER ─── */
 .results-header {
   display: flex;
   align-items: center;
@@ -957,7 +671,19 @@ onMounted(async () => {
   font-weight: 500;
 }
 
-/* ─── SORT BAR ─── */
+.competencia-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--accent-gold);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(232, 196, 160, 0.1);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 196, 160, 0.2);
+}
+
 .sort-bar {
   display: flex;
   flex-direction: column;
@@ -1012,7 +738,69 @@ onMounted(async () => {
   box-shadow: 0 0 15px rgba(232, 196, 160, 0.1);
 }
 
-/* ─── LOADING ─── */
+.nombre-grupo {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  transition: all 0.3s ease;
+}
+
+.nombre-grupo.tiene-competencia {
+  border-color: rgba(232, 196, 160, 0.2);
+  box-shadow: 0 0 20px rgba(232, 196, 160, 0.05);
+}
+
+.grupo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(232, 196, 160, 0.08), rgba(232, 196, 160, 0.02));
+  border-bottom: 1px solid rgba(232, 196, 160, 0.1);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.grupo-nombre {
+  color: var(--accent-gold);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.grupo-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.grupo-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.stat-min { color: #34d399; }
+.stat-max { color: #fb7185; }
+.stat-diff { 
+  color: var(--accent-gold); 
+  background: rgba(232, 196, 160, 0.1);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.grupo-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -1032,20 +820,12 @@ onMounted(async () => {
   animation: spin 0.8s linear infinite;
 }
 
-.loading-spinner--sm {
-  width: 16px;
-  height: 16px;
-  border-width: 1.5px;
-}
-
-/* ─── LISTA ─── */
 .productos-lista {
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
 }
 
-/* ─── EMPTY ─── */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1099,7 +879,6 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-/* ─── COMPARE FLOAT ─── */
 .compare-float {
   position: fixed;
   bottom: 1.25rem;
@@ -1192,27 +971,16 @@ onMounted(async () => {
   transform: translateX(-50%) translateY(20px);
 }
 
-/* Scrollbar del dropdown */
-.suggestions-dropdown::-webkit-scrollbar {
-  width: 4px;
-}
-
-.suggestions-dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.suggestions-dropdown::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
 @media (max-width: 480px) {
   .page-content { padding: 1rem; gap: 1rem; }
   .page-title { font-size: 1.25rem; }
   .sort-chips { gap: 0.375rem; }
   .sort-chip { padding: 0.35rem 0.625rem; font-size: 0.75rem; }
-  .suggestion-item { padding: 0.5rem 0.75rem; }
   .results-count { font-size: 0.75rem; }
+  .grupo-header { padding: 0.6rem 0.75rem; }
+  .grupo-nombre { font-size: 0.82rem; }
+  .grupo-stats { gap: 0.5rem; }
+  .grupo-stat { font-size: 0.7rem; }
 }
 
 @media (min-width: 640px) {
