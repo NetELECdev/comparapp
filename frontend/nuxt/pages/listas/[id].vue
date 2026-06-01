@@ -442,7 +442,7 @@ function contarPorEstado(estado: string) {
 }
 
 function formatPrecio(n: number) {
-  return n > 0 ? `$${n.toLocaleString('es-AR')}` : '—'
+  return n > 0 ? `${n.toLocaleString('es-AR')}` : '—'
 }
 
 // Cargar lista
@@ -646,8 +646,15 @@ onMounted(cargar)
 }
 
 .modal-optimizador {
-  max-height: 85vh;
+  max-height: 80vh;
   overflow-y: auto;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+@media (min-width: 640px) {
+  .modal-optimizador {
+    border-radius: var(--radius-lg);
+    max-height: 75vh;
+  }
 }
 
 .opt-resumen {
