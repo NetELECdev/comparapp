@@ -182,7 +182,8 @@ async function register() {
   try {
     const response = await $fetch(`${config.public.apiBase}/register`, {
       method: 'POST',
-      query: {
+      headers: { 'Content-Type': 'application/json' },
+      body: {
         email: email.value,
         password: password.value,
         nombre_completo: nombre.value
@@ -205,17 +206,14 @@ async function register() {
 async function registerWithGoogle() {
   error.value = ''
   loadingGoogle.value = true
-
   try {
-    const response = await $fetch<{ url: string }>(`${config.public.apiBase}/auth/google`)
-
-    if (response?.url) {
-      window.location.href = response.url
-    } else {
-      error.value = 'No se pudo iniciar el registro con Google'
-    }
+    const { loginWithGoogle: oauthGoogle } = useSupabaseAuth()
+    await oauthGoogle()
+    // Supabase redirige automáticamente a Google
+    error.value = 'No se pudo iniciar el registro con Google'
   } catch (err: any) {
-    handleError(err)
+    error.value = 'Google OAuth no está configurado aún. Usá email y contraseña.'
+    console.error('Google OAuth error:', err)
   } finally {
     loadingGoogle.value = false
   }

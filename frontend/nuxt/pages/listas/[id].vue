@@ -96,6 +96,14 @@
                 <span v-if="item.marca" class="item-marca">· {{ item.marca }}</span>
                 <span class="item-prioridad" :class="item.prioridad">{{ item.prioridad }}</span>
               </div>
+              <!-- Proveedor + distancia del producto vinculado -->
+              <div v-if="item.producto?.provee_prod" class="item-proveedor-row">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>
+                <span class="item-proveedor-nombre">{{ item.producto.provee_prod }}</span>
+                <span v-if="distanciaProveedor(item.producto.provee_prod)" class="item-distancia">
+                  · {{ distanciaProveedor(item.producto.provee_prod) }}
+                </span>
+              </div>
               <p v-if="item.notas" class="item-notas">💬 {{ item.notas }}</p>
               <p v-if="item.precio_referencia" class="item-precio">
                 ${{ Number(item.precio_referencia).toLocaleString('es-AR') }}
@@ -261,7 +269,7 @@
 
     <!-- MODAL OPTIMIZADOR -->
     <Teleport to="body">
-      <div v-if="mostrarOptimizador" class="modal-overlay" @click.self="mostrarOptimizador = false">
+      <div v-if="mostrarOptimizador" class="modal-overlay modal-optimizador-overlay" @click.self="mostrarOptimizador = false">
         <div class="modal-card modal-optimizador">
           <div class="modal-header">
             <h3 class="modal-title">🛒 Optimizador de compra</h3>
@@ -278,36 +286,106 @@
           </div>
 
           <template v-else-if="optimizacion">
-            <!-- Resumen -->
-            <div class="opt-resumen">
-              <div v-if="optimizacion.mejor_opcion" class="opt-card opt-mejor">
-                <span class="opt-label">Mejor opción única</span>
-                <span class="opt-proveedor">{{ optimizacion.mejor_opcion.proveedor }}</span>
-                <span class="opt-total">${{ formatPrecio(optimizacion.mejor_opcion.total) }}</span>
-                <span v-if="optimizacion.mejor_opcion.ahorro_vs_peor > 0" class="opt-ahorro">
+
+            <!-- BLOQUE PRINCIPAL: dos columnas — resumen izq, productos der -->
+            <div v-if="optimizacion.mejor_opcion" class="opt-bloque-principal">
+
+              <!-- Columna izquierda: resumen del mejor proveedor -->
+              <div class="opt-col-resumen">
+                <span class="opt-label-tag opt-tag-verde">Mejor precio</span>
+                <span class="opt-bloque-proveedor">{{ optimizacion.mejor_opcion.proveedor }}</span>
+                <div v-if="optimizacion.mejor_opcion.distancia_km !== null" class="opt-distancia">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                  {{ labelDistancia(optimizacion.mejor_opcion.distancia_km) }}
+                </div>
+                <span class="opt-bloque-total">${{ formatPrecio(optimizacion.mejor_opcion.total) }}</span>
+                <span v-if="optimizacion.mejor_opcion.ahorro_vs_peor > 0" class="opt-bloque-ahorro">
                   Ahorrás ${{ formatPrecio(optimizacion.mejor_opcion.ahorro_vs_peor) }} vs el más caro
                 </span>
-                <span v-if="!optimizacion.mejor_opcion.completo" class="opt-incompleto">
-                  ⚠️ No tiene todos los productos
-                </span>
+                <div v-if="optimizacion.mejor_opcion.completo" class="opt-completo-tag">
+                  ✓ Tiene todos los productos
+                </div>
               </div>
 
-              <div v-if="optimizacion.division_sugerida" class="opt-card opt-division">
-                <span class="opt-label">Dividiendo en {{ optimizacion.division_sugerida.cantidad_proveedores }} comercios</span>
-                <span class="opt-total opt-total-division">${{ formatPrecio(optimizacion.division_sugerida.total) }}</span>
-                <span v-if="optimizacion.division_sugerida.ahorro_vs_unico > 0" class="opt-ahorro opt-ahorro-division">
-                  🔥 Ahorrás ${{ formatPrecio(optimizacion.division_sugerida.ahorro_vs_unico) }} extra
-                </span>
+              <!-- Columna derecha: productos de este proveedor -->
+              <div class="opt-col-productos">
+                <div class="opt-col-titulo">Productos incluidos</div>
+                <div v-for="p in optimizacion.mejor_opcion.detalle_productos" :key="p.nombre" class="opt-prod-row">
+                  <span class="opt-prod-nombre">{{ p.nombre }} ×{{ p.cantidad }}</span>
+                  <span class="opt-prod-precio">${{ formatPrecio(p.precio_unitario) }}</span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- FALTANTES: mismo criterio, debajo, dentro de la misma sección -->
+            <div v-if="!optimizacion.mejor_opcion?.completo && optimizacion.proveedor_faltantes" class="opt-bloque-faltantes">
+              <div class="opt-faltantes-col-resumen">
+                <span class="opt-label-tag opt-tag-naranja">Faltantes · mejor precio</span>
+                <span class="opt-bloque-proveedor" style="color: var(--accent-amber)">{{ optimizacion.proveedor_faltantes.proveedor }}</span>
+                <div v-if="optimizacion.proveedor_faltantes.distancia_km !== null" class="opt-distancia">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                  {{ labelDistancia(optimizacion.proveedor_faltantes.distancia_km) }}
+                </div>
+                <span class="opt-bloque-total" style="font-size:1.1rem">${{ formatPrecio(optimizacion.proveedor_faltantes.subtotal) }}</span>
+              </div>
+              <div class="opt-col-productos">
+                <div class="opt-col-titulo">Productos faltantes</div>
+                <div v-for="p in optimizacion.proveedor_faltantes.items" :key="p.nombre" class="opt-prod-row">
+                  <span class="opt-prod-nombre">{{ p.nombre }} ×{{ p.cantidad }}</span>
+                  <span class="opt-prod-precio">${{ formatPrecio(p.precio_unitario) }}</span>
+                </div>
               </div>
             </div>
 
-            <!-- Tabla comparativa -->
+            <!-- ALTERNATIVA COMPLETA -->
+            <div
+              v-if="optimizacion.alternativa_completa &&
+                    optimizacion.alternativa_completa.proveedor !== optimizacion.mejor_opcion?.proveedor"
+              class="opt-bloque-alternativa"
+            >
+              <span class="opt-label-tag opt-tag-gris">Alternativa · lista completa</span>
+              <div class="opt-alt-fila">
+                <span class="opt-alt-proveedor">{{ optimizacion.alternativa_completa.proveedor }}</span>
+                <div v-if="optimizacion.alternativa_completa.distancia_km !== null" class="opt-distancia">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                  {{ labelDistancia(optimizacion.alternativa_completa.distancia_km) }}
+                </div>
+                <span class="opt-alt-total">${{ formatPrecio(optimizacion.alternativa_completa.total) }}</span>
+              </div>
+              <span class="opt-alt-diff">
+                +${{ formatPrecio(optimizacion.alternativa_completa.total - (optimizacion.mejor_opcion?.total || 0)) }} más, pero tiene todos los productos
+              </span>
+            </div>
+
+            <!-- DIVISIÓN ÓPTIMA -->
+            <div v-if="optimizacion.division_sugerida && optimizacion.division_sugerida.ahorro_vs_unico > 0" class="opt-bloque-division">
+              <span class="opt-label-tag opt-tag-dorado">División óptima · {{ optimizacion.division_sugerida.cantidad_proveedores }} comercios</span>
+              <span class="opt-div-total">${{ formatPrecio(optimizacion.division_sugerida.total) }}</span>
+              <span class="opt-div-ahorro">Ahorrás ${{ formatPrecio(optimizacion.division_sugerida.ahorro_vs_unico) }} extra repartiendo la compra</span>
+              <div v-for="div in optimizacion.division_sugerida.proveedores" :key="div.proveedor" class="opt-div-grupo">
+                <div class="opt-div-grupo-header">
+                  <div class="opt-prov-con-distancia">
+                    <span>{{ div.proveedor }}</span>
+                    <span v-if="div.distancia_km !== null" class="opt-distancia">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                      {{ labelDistancia(div.distancia_km) }}
+                    </span>
+                  </div>
+                  <span>${{ formatPrecio(div.subtotal) }}</span>
+                </div>
+                <div v-for="item in div.items" :key="item.nombre" class="opt-div-item">
+                  <span>{{ item.nombre }} ×{{ item.cantidad }}</span>
+                  <span>${{ formatPrecio(item.precio_unitario) }} c/u</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TABLA COMPARATIVA -->
             <div class="opt-tabla">
               <h4>Comparación por proveedor</h4>
               <div class="opt-tabla-header">
-                <span>Proveedor</span>
-                <span>Total</span>
-                <span>Productos</span>
+                <span>Proveedor</span><span>Total</span><span>Prod.</span>
               </div>
               <div
                 v-for="(prov, idx) in optimizacion.proveedores"
@@ -315,26 +393,15 @@
                 class="opt-tabla-row"
                 :class="{ 'opt-ganador': idx === 0 }"
               >
-                <span class="opt-nombre">{{ prov.proveedor }}</span>
+                <div class="opt-prov-con-distancia">
+                  <span class="opt-nombre">{{ prov.proveedor }}</span>
+                  <span v-if="prov.distancia_km !== null" class="opt-distancia-sm">{{ labelDistancia(prov.distancia_km) }}</span>
+                </div>
                 <span class="opt-monto">${{ formatPrecio(prov.total) }}</span>
                 <span class="opt-cantidad">{{ prov.items_encontrados }}/{{ optimizacion.items_count }}</span>
               </div>
             </div>
 
-            <!-- Detalle de división -->
-            <div v-if="optimizacion.division_sugerida" class="opt-division-detalle">
-              <h4>🛍️ Compra dividida sugerida</h4>
-              <div v-for="div in optimizacion.division_sugerida.proveedores" :key="div.proveedor" class="opt-division-grupo">
-                <div class="opt-division-header">
-                  <span>{{ div.proveedor }}</span>
-                  <span>${{ formatPrecio(div.subtotal) }}</span>
-                </div>
-                <div v-for="item in div.items" :key="item.nombre" class="opt-division-item">
-                  <span>{{ item.nombre }} x{{ item.cantidad }}</span>
-                  <span>${{ formatPrecio(item.precio_unitario) }} c/u</span>
-                </div>
-              </div>
-            </div>
           </template>
         </div>
       </div>
@@ -423,6 +490,24 @@ const guardandoItem = ref(false)
 const mostrarOptimizador = ref(false)
 const loadingOptimizador = ref(false)
 const optimizacion = ref<any>(null)
+const userLat = ref<number | null>(null)
+const userLng = ref<number | null>(null)
+
+// Obtener ubicación del usuario al abrir el optimizador
+function obtenerUbicacion(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(); return }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLat.value = pos.coords.latitude
+        userLng.value = pos.coords.longitude
+        resolve()
+      },
+      () => resolve(), // si rechaza, continuar sin distancia
+      { timeout: 5000 }
+    )
+  })
+}
 
 // Computed
 const itemsFiltrados = computed(() => {
@@ -443,6 +528,36 @@ function contarPorEstado(estado: string) {
 
 function formatPrecio(n: number) {
   return n > 0 ? `${n.toLocaleString('es-AR')}` : '—'
+}
+
+// ── Distancias por proveedor ──────────────────────────────
+const distanciasPorProveedor = computed<Record<string, number | null>>(() => {
+  const map: Record<string, number | null> = {}
+  if (!optimizacion.value) return map
+  const fuentes: any[] = [
+    optimizacion.value.mejor_opcion,
+    optimizacion.value.proveedor_faltantes,
+    optimizacion.value.alternativa_completa,
+    ...(optimizacion.value.proveedores || []),
+    ...(optimizacion.value.division_sugerida?.proveedores || [])
+  ]
+  for (const f of fuentes) {
+    if (f?.proveedor && f.distancia_km !== undefined) {
+      map[f.proveedor] = f.distancia_km
+    }
+  }
+  return map
+})
+
+function distanciaProveedor(nombre: string): string | null {
+  const d = distanciasPorProveedor.value[nombre]
+  if (d === null || d === undefined) return null
+  return d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`
+}
+
+function labelDistancia(km: number | null | undefined): string {
+  if (km === null || km === undefined) return ''
+  return km < 1 ? `${(km * 1000).toFixed(0)} m` : `${km.toFixed(1)} km`
 }
 
 // Cargar lista
@@ -568,7 +683,12 @@ async function eliminarItem(itemId: string) {
 async function cargarOptimizacion() {
   loadingOptimizador.value = true
   try {
-    const data = await api(`/listas/${id}/optimize`)
+    await obtenerUbicacion()
+    let url = `/listas/${id}/optimize`
+    if (userLat.value && userLng.value) {
+      url += `?user_lat=${userLat.value}&user_lng=${userLng.value}`
+    }
+    const data = await api(url)
     optimizacion.value = data
   } catch (err) {
     console.error('Error cargando optimización:', err)
@@ -578,7 +698,8 @@ async function cargarOptimizacion() {
 }
 
 watch(mostrarOptimizador, (val) => {
-  if (val && !optimizacion.value) {
+  if (val) {
+    optimizacion.value = null  // siempre refrescar al abrir
     cargarOptimizacion()
   }
 })
@@ -957,6 +1078,18 @@ onMounted(cargar)
 }
 .modal-buscador-overlay { align-items:flex-start; padding-top:4rem; }
 .modal-config-overlay { align-items:center; padding:1rem; }
+.modal-optimizador-overlay {
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+}
+.modal-optimizador-overlay .modal-optimizador {
+  border-radius: var(--radius-lg) !important;
+  margin: auto;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+}
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 
 .modal-card {
@@ -1103,4 +1236,203 @@ onMounted(cargar)
 }
 .btn-gold:hover { filter:brightness(1.1); }
 .btn-gold:disabled { opacity:0.6; cursor:not-allowed; }
+
+/* ── Optimizador rediseñado ── */
+.opt-bloque-principal {
+  background: rgba(52,211,153,0.06);
+  border: 1px solid rgba(52,211,153,0.2);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.opt-bloque-header { display: flex; flex-direction: column; gap: 0.3rem; }
+.opt-label-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  width: fit-content;
+  margin-bottom: 0.2rem;
+}
+.opt-tag-verde  { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+.opt-tag-gris   { background: rgba(148,163,184,0.12); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+.opt-tag-dorado { background: rgba(232,196,160,0.12); color: var(--accent-gold); border: 1px solid rgba(232,196,160,0.25); }
+
+.opt-bloque-proveedor { font-size: 1rem; font-weight: 700; color: #34d399; }
+.opt-bloque-total { font-size: 1.6rem; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
+.opt-bloque-ahorro { font-size: 0.78rem; color: #34d399; }
+
+/* Faltantes — dentro del bloque principal, separados */
+.opt-faltantes {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.opt-faltantes-sep {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+.opt-faltantes-row { display: flex; justify-content: space-between; align-items: baseline; }
+.opt-faltantes-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-faltantes-total { font-size: 0.95rem; font-weight: 700; color: var(--accent-gold); }
+.opt-faltantes-item {
+  display: flex; justify-content: space-between;
+  font-size: 0.78rem; color: var(--text-secondary);
+  padding: 0.2rem 0;
+}
+.opt-completo-tag {
+  margin-top: 0.5rem;
+  font-size: 0.78rem; color: #34d399;
+  display: flex; align-items: center; gap: 0.3rem;
+}
+
+/* Alternativa completa */
+.opt-bloque-alternativa {
+  background: rgba(148,163,184,0.05);
+  border: 1px solid rgba(148,163,184,0.15);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-alt-total { font-size: 1.2rem; font-weight: 700; color: var(--text-secondary); }
+.opt-alt-diff { font-size: 0.75rem; color: var(--text-muted); }
+
+/* División */
+.opt-bloque-division {
+  background: rgba(232,196,160,0.06);
+  border: 1px solid rgba(232,196,160,0.18);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.opt-div-total { font-size: 1.4rem; font-weight: 800; color: var(--accent-gold); }
+.opt-div-ahorro { font-size: 0.78rem; color: var(--accent-gold); font-weight: 600; }
+.opt-div-grupo {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.opt-div-grupo-header {
+  display: flex; justify-content: space-between;
+  font-size: 0.85rem; font-weight: 600;
+  color: var(--text-primary); margin-bottom: 0.25rem;
+}
+.opt-div-item {
+  display: flex; justify-content: space-between;
+  font-size: 0.75rem; color: var(--text-secondary);
+  padding: 0.15rem 0;
+}
+
+
+/* ── Layout de dos columnas para bloques del optimizador ── */
+.opt-bloque-principal,
+.opt-bloque-faltantes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.opt-bloque-principal { background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.2); }
+.opt-bloque-faltantes { background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2); }
+
+.opt-col-resumen,
+.opt-faltantes-col-resumen {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.opt-col-productos {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.opt-col-titulo {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+
+.opt-prod-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.78rem;
+  padding: 0.2rem 0;
+  border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  gap: 6px;
+}
+.opt-prod-row:last-child { border-bottom: none; }
+.opt-prod-nombre { color: var(--text-secondary); flex: 1; }
+.opt-prod-precio { color: var(--accent-gold); font-weight: 600; white-space: nowrap; }
+
+.opt-distancia {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.opt-distancia-sm {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.opt-prov-con-distancia {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.opt-alt-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-alt-total { font-size: 1rem; font-weight: 700; color: var(--text-secondary); margin-left: auto; }
+
+/* Naranja para faltantes */
+.opt-tag-naranja { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+
+/* item-proveedor-row en la lista */
+.item-proveedor-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.item-proveedor-nombre { color: var(--text-secondary); font-weight: 500; }
+.item-distancia { color: var(--text-muted); }
+
 </style>

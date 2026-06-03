@@ -163,6 +163,82 @@ def logout_user(db: DatabaseManager = Depends(get_db)):
     db.logout_user()
     return {"message": "Sesion cerrada correctamente."}
 
+
+@app.post("/api/v1/auth/google/callback", tags=["Auth"])
+def google_oauth_callback(
+    data: dict = Body(...),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Recibe el token de Supabase tras el OAuth de Google.
+    Crea o actualiza el usuario en la tabla users y devuelve los datos del usuario.
+    """
+    try:
+        access_token = data.get("access_token")
+        email = data.get("email", "")
+        nombre_completo = data.get("nombre_completo", "")
+
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Token requerido")
+
+        # Verificar el token con Supabase
+        try:
+            user_resp = db.supabase.auth.get_user(access_token)
+            supabase_user_id = user_resp.user.id
+            user_email = user_resp.user.email or email
+            meta = user_resp.user.user_metadata or {}
+            user_nombre = meta.get("full_name") or meta.get("name") or nombre_completo or user_email
+        except Exception as token_err:
+            print(f"⚠️ Token verify failed: {token_err} — usando datos del body")
+            # Si falla la verificación, usar los datos que mandó el frontend
+            if not email:
+                raise HTTPException(status_code=401, detail="Token inválido y sin datos de respaldo")
+            supabase_user_id = None
+            user_email = email
+            user_nombre = nombre_completo or email
+
+        # Buscar si ya existe en nuestra tabla users
+        existing = None
+        if supabase_user_id:
+            res = db.supabase.table("users")                .select("*")                .eq("id_user", supabase_user_id)                .execute()
+            existing = res if res.data else None
+        
+        if not existing:
+            res = db.supabase.table("users")                .select("*")                .eq("email_user", user_email)                .execute()
+            existing = res if res.data else None
+
+        if existing.data:
+            # Ya existe — actualizar último acceso
+            user_data = existing.data[0]
+        else:
+            # Crear nuevo usuario en tabla users
+            new_user = {
+                "id_user": supabase_user_id,
+                "email_user": user_email,
+                "nombre_completo": user_nombre,
+                "rol_user": "usuario",
+                "proveedor_oauth": "google"
+            }
+            result = db.supabase.table("users").insert(new_user).execute()
+            user_data = result.data[0] if result.data else new_user
+
+        return {
+            "message": "Login con Google exitoso",
+            "user": {
+                "id": supabase_user_id,
+                "email": user_email,
+                "nombre_completo": user_nombre,
+                "rol": user_data.get("rol_user", "usuario"),
+                "access_token": access_token
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error Google callback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ---------------------------------------------------
 # Endpoints de CATEGORIAS
 # ---------------------------------------------------
@@ -510,19 +586,64 @@ def delete_product(
 def get_price_history(
     product_id: str,
     dias: Optional[int] = Query(30, description="Dias hacia atras"),
+    todos_proveedores: Optional[bool] = Query(False, description="Incluir historial de todos los proveedores del mismo producto"),
     db: DatabaseManager = Depends(get_db)
 ):
-    """Obtiene historial de precios de un producto para el grafico"""
+    """
+    Obtiene historial de precios de un producto para el gráfico.
+    Si todos_proveedores=true, agrega el historial de todos los competidores
+    (mismo nombre de producto) para mostrar la curva unificada del mercado.
+    El último punto siempre es el precio actual del producto solicitado.
+    """
     try:
         desde = datetime.now() - timedelta(days=dias)
 
-        response = db.supabase.table("historial_precios").select("precio, fecha_registro").eq("id_prod", product_id).gte("fecha_registro", desde.isoformat()).order("fecha_registro", desc=False).execute()
+        # 1. Historial del producto solicitado
+        response = db.supabase.table("historial_precios")            .select("precio, fecha_registro")            .eq("id_prod", product_id)            .gte("fecha_registro", desde.isoformat())            .order("fecha_registro", desc=False)            .execute()
+
+        serie = list(response.data or [])
+
+        # 2. Si se pide historial unificado, agregar historial de competidores
+        if todos_proveedores:
+            # Obtener nombre del producto actual
+            prod_res = db.supabase.table("producto")                .select("nombre_prod, precio_prod")                .eq("id_prod", product_id)                .limit(1).execute()
+
+            if prod_res.data:
+                nombre = prod_res.data[0]["nombre_prod"]
+                precio_actual = prod_res.data[0]["precio_prod"]
+
+                # Buscar competidores con mismo nombre
+                comp_res = db.supabase.table("producto")                    .select("id_prod")                    .ilike("nombre_prod", nombre)                    .eq("activo_prod", True)                    .neq("id_prod", product_id)                    .execute()
+
+                competidor_ids = [c["id_prod"] for c in (comp_res.data or [])]
+
+                # Obtener historial de cada competidor
+                for comp_id in competidor_ids:
+                    comp_hist = db.supabase.table("historial_precios")                        .select("precio, fecha_registro")                        .eq("id_prod", comp_id)                        .gte("fecha_registro", desde.isoformat())                        .order("fecha_registro", desc=False)                        .execute()
+                    serie.extend(comp_hist.data or [])
+
+                # Ordenar toda la serie por fecha
+                serie.sort(key=lambda x: x.get("fecha_registro", ""))
+
+                # Agregar precio actual como último punto
+                serie.append({
+                    "precio": precio_actual,
+                    "fecha_registro": datetime.now().isoformat()
+                })
+
+        # Mapear al formato que espera el frontend
+        series_mapped = [
+            {"precio": r["precio"], "fecha": r["fecha_registro"]}
+            for r in serie
+        ]
 
         return {
             "product_id": product_id,
             "dias_consultados": dias,
-            "count": len(response.data or []),
-            "history": response.data or []
+            "todos_proveedores": todos_proveedores,
+            "count": len(series_mapped),
+            "series": series_mapped,
+            "history": serie  # compatibilidad con código anterior
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo historial: {str(e)}")
@@ -883,15 +1004,15 @@ def get_ofertas_vigentes(
 ):
     """Obtiene todas las ofertas vigentes (activas y dentro de fecha)"""
     try:
-        query = db.supabase.table('ofertas_vigentes').select('*')
-
-        if categoria:
-            query = query.eq('cate_prod', categoria)
-
-        if proveedor:
-            query = query.eq('id_provee', proveedor)
-
-        response = query.limit(limit).order('descuento_pct', desc=True).execute()
+        # Intentar con la vista, si no existe usar la tabla directa
+        # Tabla ofertas con join a producto
+        try:
+            query = db.supabase.table('ofertas')                .select('*, producto(nombre_prod, cate_prod, imagen_prod, provee_prod)')                .eq('activa', True)                .gte('fecha_fin', datetime.now().isoformat())
+            response = query.limit(limit).order('descuento_pct', desc=True).execute()
+        except Exception as join_err:
+            print(f"⚠️ Join falló ({join_err}), intentando sin join")
+            query = db.supabase.table('ofertas')                .select('*')                .eq('activa', True)
+            response = query.limit(limit).execute()
 
         if response.data:
             return {"count": len(response.data), "results": response.data}
@@ -947,13 +1068,19 @@ def create_oferta(
             if precio_normal > 0:
                 oferta_data['descuento_pct'] = round((precio_normal - precio_oferta) / precio_normal * 100)
 
-        # Agregar metadata
-        oferta_data['fecha_inicio'] = oferta_data.get('fecha_inicio', datetime.now().isoformat())
-        oferta_data['activo_oferta'] = True
-        oferta_data['id_user_creador'] = db.current_user.get('id') if db.current_user else None
+        # Campos según estructura real de la tabla ofertas
+        # descuento_pct es columna generada — Supabase la calcula automáticamente
+        insert_data = {
+            'id_prod':       oferta_data['id_prod'],
+            'precio_normal': float(oferta_data['precio_normal']),
+            'precio_oferta': float(oferta_data['precio_oferta']),
+            'fecha_inicio':  oferta_data.get('fecha_inicio', datetime.now().isoformat()),
+            'fecha_fin':     oferta_data['fecha_fin'],
+            'activa':        True,
+            'creada_por':    db.current_user.get('id') if db.current_user else None
+        }
 
-        # Insertar en tabla ofertas
-        response = db.supabase.table('ofertas').insert(oferta_data).execute()
+        response = db.supabase.table('ofertas').insert(insert_data).execute()
 
         if response.data:
             return {"message": "Oferta creada correctamente", "data": response.data[0]}
@@ -1164,15 +1291,31 @@ def health_check():
 @app.get("/api/v1/listas/{lista_id}/optimize", tags=["Listas"])
 def optimize_lista(
     lista_id: str,
+    user_lat: Optional[float] = Query(None, description="Latitud del usuario para calcular distancias"),
+    user_lng: Optional[float] = Query(None, description="Longitud del usuario para calcular distancias"),
     authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
     """
-    Calcula el costo total de la lista por cada proveedor disponible.
-    Devuelve: tabla comparativa, resumen de ahorro, y sugerencia de división.
+    Calcula el costo total de la lista por cada proveedor.
+    Incluye: productos por proveedor, faltantes, distancia al usuario,
+    alternativa completa, y sugerencia de división óptima.
     """
     set_user_from_token(db, authorization)
-    
+
+    import math
+    from collections import defaultdict
+
+    def haversine(lat1, lng1, lat2, lng2):
+        """Distancia en km entre dos coordenadas."""
+        if None in (lat1, lng1, lat2, lng2):
+            return None
+        R = 6371
+        d_lat = math.radians(lat2 - lat1)
+        d_lng = math.radians(lng2 - lng1)
+        a = math.sin(d_lat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lng/2)**2
+        return round(R * 2 * math.asin(math.sqrt(a)), 1)
+
     try:
         # 1. Obtener items de la lista
         lista_res = db.supabase.table('lista_compra')\
@@ -1181,109 +1324,176 @@ def optimize_lista(
             .eq('activa', True)\
             .maybe_single()\
             .execute()
-        
+
         if not lista_res.data:
             raise HTTPException(status_code=404, detail="Lista no encontrada")
-        
+
         items = lista_res.data.get('lista_item', [])
         if not items:
-            return {
-                "lista_id": lista_id,
-                "items_count": 0,
-                "message": "La lista está vacía",
-                "proveedores": [],
-                "mejor_opcion": None,
-                "division_sugerida": None
+            return {"lista_id": lista_id, "items_count": 0, "message": "La lista está vacía",
+                    "proveedores": [], "mejor_opcion": None, "division_sugerida": None}
+
+        # 2. Cargar coordenadas de todos los proveedores activos
+        prov_res = db.supabase.table('proveedor')\
+            .select('nombre_provee, ubicacion_provee, direccion_provee')\
+            .eq('activo_provee', True)\
+            .execute()
+
+        coords_por_proveedor = {}
+        for prov in (prov_res.data or []):
+            nombre = prov.get('nombre_provee', '')
+            coords = db._parse_wkb_point(prov.get('ubicacion_provee') or '')
+            distancia = haversine(user_lat, user_lng, coords.get('lat'), coords.get('lng'))
+            coords_por_proveedor[nombre] = {
+                'lat': coords.get('lat'),
+                'lng': coords.get('lng'),
+                'distancia_km': distancia,
+                'direccion': prov.get('direccion_provee', '')
             }
-        
-        # 2. Para cada item, buscar productos coincidentes por nombre
-        from collections import defaultdict
-        
-        productos_por_item = {}  # item_id -> [productos coincidentes]
+
+        # 3. Para cada item, buscar productos coincidentes
+        productos_por_item = {}
         todos_proveedores = set()
-        
+
         for item in items:
             nombre_item = item.get('nombre_item', '').strip()
             if not nombre_item:
                 continue
-            
-            # Buscar productos que coincidan con el nombre del item
             prod_res = db.supabase.table('producto')\
                 .select('id_prod, nombre_prod, precio_prod, provee_prod, marca_prod, unidad_prod, cantidad_prod')\
                 .eq('activo_prod', True)\
                 .ilike('nombre_prod', f'%{nombre_item}%')\
                 .execute()
-            
             productos = prod_res.data or []
             productos_por_item[item['id_item']] = productos
             for p in productos:
                 todos_proveedores.add(p.get('provee_prod', 'Desconocido'))
-        
-        # 3. Calcular costo por proveedor
+
+        # 4. Calcular costo por proveedor con detalle de productos
         proveedores_data = {}
         for proveedor in todos_proveedores:
             total = 0
             items_encontrados = 0
             items_faltantes = []
-            
+            detalle_productos = []  # productos que SÍ tiene este proveedor
+
             for item in items:
                 item_id = item['id_item']
                 cantidad = item.get('cantidad', 1)
                 productos = productos_por_item.get(item_id, [])
-                
-                # Buscar el producto más barato de este proveedor
+
                 producto_proveedor = None
                 for p in productos:
                     if p.get('provee_prod') == proveedor:
                         if not producto_proveedor or float(p['precio_prod']) < float(producto_proveedor['precio_prod']):
                             producto_proveedor = p
-                
+
                 if producto_proveedor:
                     precio = float(producto_proveedor['precio_prod'])
                     total += precio * cantidad
                     items_encontrados += 1
+                    detalle_productos.append({
+                        "nombre": item['nombre_item'],
+                        "cantidad": cantidad,
+                        "precio_unitario": precio,
+                        "subtotal": round(precio * cantidad, 2)
+                    })
                 else:
                     items_faltantes.append(item['nombre_item'])
-            
+
+            info_coords = coords_por_proveedor.get(proveedor, {})
             proveedores_data[proveedor] = {
                 "proveedor": proveedor,
                 "total": round(total, 2),
                 "items_encontrados": items_encontrados,
                 "items_faltantes": items_faltantes,
-                "completo": len(items_faltantes) == 0
+                "completo": len(items_faltantes) == 0,
+                "detalle_productos": detalle_productos,
+                "distancia_km": info_coords.get('distancia_km'),
+                "direccion": info_coords.get('direccion', '')
             }
-        
-        # 4. Ordenar por total
+
+        # 5. Ordenar: primero los que tienen más items, luego por precio
         proveedores_ordenados = sorted(
             proveedores_data.values(),
-            key=lambda x: x['total']
+            key=lambda x: (-x['items_encontrados'], x['total'])
         )
-        
-        # 5. Mejor opción (único proveedor)
+
+        # 6. Mejor opción = mayor cobertura al menor precio
         mejor_opcion = proveedores_ordenados[0] if proveedores_ordenados else None
-        
-        # 6. Calcular ahorro vs peor opción
+
+        ahorro_vs_peor = 0
         if len(proveedores_ordenados) > 1:
-            peor = proveedores_ordenados[-1]
-            ahorro_vs_peor = round(peor['total'] - mejor_opcion['total'], 2)
-        else:
-            ahorro_vs_peor = 0
-        
-        # 7. DIVISIÓN SUGERIDA: comprar cada item en el proveedor más barato
+            peor = max(proveedores_ordenados, key=lambda x: x['total'])
+            if mejor_opcion:
+                ahorro_vs_peor = round(peor['total'] - mejor_opcion['total'], 2)
+
+        # 7. Proveedor de faltantes: el que tiene el mejor precio para los
+        #    productos que le faltan al mejor proveedor
+        proveedor_faltantes = None
+        if mejor_opcion and mejor_opcion['items_faltantes']:
+            faltantes_data = defaultdict(lambda: {"items": [], "subtotal": 0})
+
+            for nombre_faltante in mejor_opcion['items_faltantes']:
+                # Buscar el item original
+                item_obj = next((i for i in items if i.get('nombre_item') == nombre_faltante), None)
+                if not item_obj:
+                    continue
+                item_id = item_obj['id_item']
+                cantidad = item_obj.get('cantidad', 1)
+                productos = productos_por_item.get(item_id, [])
+
+                # Excluir el proveedor principal — buscar el más barato entre el resto
+                candidatos = [p for p in productos if p.get('provee_prod') != mejor_opcion['proveedor']]
+                if candidatos:
+                    mas_barato = min(candidatos, key=lambda p: float(p['precio_prod']))
+                    prov_f = mas_barato['provee_prod']
+                    precio = float(mas_barato['precio_prod']) * cantidad
+                    faltantes_data[prov_f]['items'].append({
+                        "nombre": nombre_faltante,
+                        "cantidad": cantidad,
+                        "precio_unitario": float(mas_barato['precio_prod']),
+                        "subtotal": round(precio, 2)
+                    })
+                    faltantes_data[prov_f]['subtotal'] += precio
+
+            if faltantes_data:
+                # El proveedor que cubre más faltantes al menor costo
+                mejor_faltante_prov = min(faltantes_data.items(), key=lambda x: x[1]['subtotal'])
+                prov_nombre = mejor_faltante_prov[0]
+                info_coords_f = coords_por_proveedor.get(prov_nombre, {})
+                proveedor_faltantes = {
+                    "proveedor": prov_nombre,
+                    "items": mejor_faltante_prov[1]['items'],
+                    "subtotal": round(mejor_faltante_prov[1]['subtotal'], 2),
+                    "distancia_km": info_coords_f.get('distancia_km'),
+                    "direccion": info_coords_f.get('direccion', '')
+                }
+
+        # 8. Alternativa completa: el proveedor completo más barato (distinto al mejor)
+        alternativa_completa = None
+        completos = [p for p in proveedores_ordenados if p['completo'] and (not mejor_opcion or p['proveedor'] != mejor_opcion['proveedor'])]
+        if completos:
+            mejor_completo = min(completos, key=lambda x: x['total'])
+            alternativa_completa = {
+                "proveedor": mejor_completo['proveedor'],
+                "total": mejor_completo['total'],
+                "distancia_km": mejor_completo.get('distancia_km'),
+                "direccion": mejor_completo.get('direccion', '')
+            }
+
+        # 9. División óptima
         division = defaultdict(lambda: {"items": [], "subtotal": 0})
         division_total = 0
-        
+
         for item in items:
             item_id = item['id_item']
             cantidad = item.get('cantidad', 1)
             productos = productos_por_item.get(item_id, [])
-            
             if productos:
-                # Producto más barato entre todos los proveedores
                 mas_barato = min(productos, key=lambda p: float(p['precio_prod']))
                 prov = mas_barato['provee_prod']
                 precio = float(mas_barato['precio_prod']) * cantidad
-                
                 division[prov]['items'].append({
                     "nombre": item['nombre_item'],
                     "cantidad": cantidad,
@@ -1292,31 +1502,35 @@ def optimize_lista(
                 })
                 division[prov]['subtotal'] += precio
                 division_total += precio
-        
-        # Formatear división
+
         division_formateada = []
         for prov, data in sorted(division.items(), key=lambda x: x[1]['subtotal']):
+            info_coords_d = coords_por_proveedor.get(prov, {})
             division_formateada.append({
                 "proveedor": prov,
                 "items": data['items'],
-                "subtotal": round(data['subtotal'], 2)
+                "subtotal": round(data['subtotal'], 2),
+                "distancia_km": info_coords_d.get('distancia_km'),
+                "direccion": info_coords_d.get('direccion', '')
             })
-        
-        # Ahorro de la división vs mejor único proveedor
-        ahorro_division = 0
-        if mejor_opcion and division_total > 0:
-            ahorro_division = round(mejor_opcion['total'] - division_total, 2)
-        
+
+        ahorro_division = round(mejor_opcion['total'] - division_total, 2) if mejor_opcion and division_total > 0 else 0
+
         return {
             "lista_id": lista_id,
             "items_count": len(items),
             "proveedores": proveedores_ordenados,
             "mejor_opcion": {
-                "proveedor": mejor_opcion['proveedor'] if mejor_opcion else None,
-                "total": mejor_opcion['total'] if mejor_opcion else 0,
+                "proveedor": mejor_opcion['proveedor'],
+                "total": mejor_opcion['total'],
                 "ahorro_vs_peor": ahorro_vs_peor,
-                "completo": mejor_opcion['completo'] if mejor_opcion else False
-            },
+                "completo": mejor_opcion['completo'],
+                "detalle_productos": mejor_opcion['detalle_productos'],
+                "distancia_km": mejor_opcion.get('distancia_km'),
+                "direccion": mejor_opcion.get('direccion', '')
+            } if mejor_opcion else None,
+            "proveedor_faltantes": proveedor_faltantes,
+            "alternativa_completa": alternativa_completa,
             "division_sugerida": {
                 "total": round(division_total, 2),
                 "proveedores": division_formateada,
@@ -1324,7 +1538,7 @@ def optimize_lista(
                 "cantidad_proveedores": len(division_formateada)
             } if len(division_formateada) > 1 else None
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1636,9 +1850,15 @@ def create_lista(
     if not nombre_lista or not nombre_lista.strip():
         raise HTTPException(status_code=400, detail="El nombre es requerido")
     
-    lista, error = db.create_lista(db.current_user["id"], nombre_lista.strip())
+    user_id = db.current_user["id"]
+    print(f"📋 Creando lista '{nombre_lista}' para user_id={user_id}")
+    
+    lista, error = db.create_lista(user_id, nombre_lista.strip())
     if error:
+        print(f"❌ Error create_lista: {error}")
         raise HTTPException(status_code=400, detail=error)
+    
+    print(f"✅ Lista creada: {lista}")
     return {"message": "Lista creada", "data": lista}
 
 
@@ -1653,8 +1873,12 @@ def get_lista(
     if not db.current_user:
         raise HTTPException(status_code=401, detail="No autenticado")
     
-    lista, error = db.get_lista_by_id(lista_id, db.current_user["id"])
+    user_id = db.current_user["id"]
+    print(f"📋 GET lista {lista_id} para user_id={user_id}")
+    
+    lista, error = db.get_lista_by_id(lista_id, user_id)
     if error:
+        print(f"❌ Error get_lista: {error} | lista_id={lista_id} | user_id={user_id}")
         raise HTTPException(status_code=404, detail=error)
     return lista
 

@@ -17,6 +17,7 @@ class SupabaseConfig:
     # Estas credenciales están en el Dashboard de Supabase > Settings > API
     SUPABASE_URL = "https://fbsugjqjbltvvyywfsal.supabase.co"  
     SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZic3VnanFqYmx0dnZ5eXdmc2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTc5MDAsImV4cCI6MjA2MDMzMzkwMH0.WGPCnfur8MVDzW22WGF3n2K0Ai1xnVh0t0sK0MbYwoc"
+    SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZic3VnanFqYmx0dnZ5eXdmc2FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDc1NzkwMCwiZXhwIjoyMDYwMzMzOTAwfQ.S3bp-R4dvgF_z3JfoWNBx0S3EhjUtlZhCBHosclgjEY"
    
     # Configuraciones adicionales
     TIMEOUT = 30  # Timeout para requests
@@ -104,7 +105,7 @@ class SupabaseConfig:
 
     @classmethod
     def get_service_key(cls) -> str:
-        key = os.getenv('SUPABASE_SERVICE_KEY')
+        key = os.getenv('SUPABASE_SERVICE_KEY', cls.SUPABASE_SERVICE_KEY)
         if not key or not key.startswith('eyJ'):
             return cls.get_anon_key()
         return key

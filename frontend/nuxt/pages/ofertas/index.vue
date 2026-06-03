@@ -51,29 +51,33 @@
           </div>
 
           <!-- Imagen -->
-          <div class="oferta-img" @click="navigateTo(`/productos/${oferta.id_prod}`)">
-            <img :src="oferta.imagen_prod || '/images/avatar_default.png'" :alt="oferta.nombre_prod" />
+          <div class="oferta-img" @click="navigateTo(`/Productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
+            <img :src="oferta.producto?.imagen_prod || '/images/avatar_default.png'" :alt="oferta.producto?.nombre_prod || ''" />
           </div>
 
           <!-- Info -->
           <div class="oferta-info">
-            <span class="oferta-categoria">{{ oferta.cate_prod }}</span>
-            <h3 class="oferta-nombre">{{ oferta.nombre_prod }}</h3>
-            <p class="oferta-marca">{{ oferta.marca_prod }}</p>
-            <p class="oferta-proveedor" v-if="oferta.provee_prod">
-              🏪 {{ oferta.provee_prod }}
+            <span class="oferta-categoria">{{ oferta.producto?.cate_prod }}</span>
+            <h3 class="oferta-nombre">{{ oferta.producto?.nombre_prod }}</h3>
+            <p class="oferta-proveedor" v-if="oferta.producto?.provee_prod">
+              🏪 {{ oferta.producto.provee_prod }}
             </p>
 
             <!-- Precios -->
             <div class="oferta-precios">
-              <span class="precio-normal">${{ formatPrice(oferta.precio_prod) }}</span>
+              <span class="precio-normal">${{ formatPrice(oferta.precio_normal) }}</span>
               <span class="precio-oferta">${{ formatPrice(oferta.precio_oferta) }}</span>
             </div>
+
+            <!-- Fecha fin -->
+            <p class="oferta-vence" v-if="oferta.fecha_fin">
+              Válido hasta {{ new Date(oferta.fecha_fin).toLocaleDateString('es-AR') }}
+            </p>
           </div>
 
           <!-- Acciones -->
           <div class="oferta-actions">
-            <button class="ver-btn" @click="navigateTo(`/productos/${oferta.id_prod}`)">
+            <button class="ver-btn" @click="navigateTo(`/Productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
               Ver producto
             </button>
           </div>
@@ -100,28 +104,19 @@ const ofertas = ref([])
 const categoriaActiva = ref(null)
 
 const categorias = computed(() => {
-  const cats = ['Todas', ...new Set(ofertas.value.map(o => o.cate_prod).filter(Boolean))]
+  const cats = ['Todas', ...new Set(ofertas.value.map(o => o.cate_prod || o.producto?.cate_prod).filter(Boolean))]
   return cats
 })
 
 const ofertasFiltradas = computed(() => {
   if (!categoriaActiva.value) return ofertas.value
-  return ofertas.value.filter(o => o.cate_prod === categoriaActiva.value)
+  return ofertas.value.filter(o => (o.cate_prod || o.producto?.cate_prod) === categoriaActiva.value)
 })
 
 onMounted(async () => {
   try {
-    // Traer productos que están en oferta (oferta_prod = true)
-    const res = await $fetch(`${config.public.apiBase}/products`)
-    const productos = res.results || []
-
-    // Filtrar solo los que tienen oferta activa
-    ofertas.value = productos
-      .filter(p => p.oferta_prod === true && p.activo_prod === true)
-      .map(p => ({
-        ...p,
-        descuento_pct: calcularDescuento(p.precio_prod, p.precio_oferta)
-      }))
+    const res = await $fetch(`${config.public.apiBase}/ofertas`)
+    ofertas.value = res.results || []
   } catch (err) {
     console.error('Error cargando ofertas:', err)
   } finally {

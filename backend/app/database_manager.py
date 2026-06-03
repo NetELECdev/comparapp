@@ -20,8 +20,8 @@ class DatabaseManager:
         self.session = requests.Session()
         self.current_user = None
         url = SupabaseConfig.get_url()
-        key = os.getenv('SUPABASE_SERVICE_KEY', SupabaseConfig.get_anon_key()) # Usar service key para el backend (bypass RLS)
-        key = SupabaseConfig.get_anon_key()
+        # Service role key — bypasea RLS para todas las operaciones del backend
+        key = SupabaseConfig.get_service_key()
         self.supabase = create_client(url, key)
 
 

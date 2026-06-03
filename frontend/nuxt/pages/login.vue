@@ -206,19 +206,14 @@ async function login() {
 async function loginWithGoogle() {
   error.value = ''
   loadingGoogle.value = true
-
   try {
-    // Llamada al endpoint de OAuth de tu backend
-    const response = await $fetch<{ url: string }>(`${config.public.apiBase}/auth/google`)
-
-    if (response?.url) {
-      // Redirigir a la URL de autorización de Google
-      window.location.href = response.url
-    } else {
-      error.value = 'No se pudo iniciar sesión con Google'
-    }
+    const { loginWithGoogle: oauthGoogle } = useSupabaseAuth()
+    await oauthGoogle()
+    // Supabase redirige automáticamente a Google — si llegamos acá hubo error
+    error.value = 'No se pudo iniciar sesión con Google'
   } catch (err: any) {
-    handleError(err)
+    error.value = 'Google OAuth no está configurado aún. Usá email y contraseña.'
+    console.error('Google OAuth error:', err)
   } finally {
     loadingGoogle.value = false
   }

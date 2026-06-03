@@ -278,26 +278,43 @@ async function cargarHistorial(dias: number) {
     // 2. Construir serie desde competidores (precios actuales de todos)
     let serieCompetidores = buildSeriesFromCompetidores()
 
-    // 3. SI hay historial individual, mezclarlo con los competidores
+    // 3. Cargar historial de TODOS los competidores (mismo nombre, todos los proveedores)
+    // Así la curva refleja la evolución del precio del producto en general,
+    // no solo de un proveedor. El punto ACTUAL marca el precio del producto seleccionado.
     let serieHistorial: any[] = []
     try {
-      const fullData = await api(`/products/${props.product.id_prod}/price-full?dias=${dias}`)
+      // Intentar endpoint de historial combinado (todos los proveedores del mismo producto)
+      const fullData = await api(`/products/${props.product.id_prod}/price-history?dias=${dias}&todos_proveedores=true`)
       serieHistorial = (fullData.series || []).map((s: any) => ({
         fecha: s.fecha,
         precio: s.precio
       }))
     } catch (e) {
-      // Si no hay historial, no pasa nada — usamos solo competidores
-      console.log('Sin historial individual, usando solo competidores')
+      // Fallback: historial solo del proveedor actual
+      try {
+        const fullData = await api(`/products/${props.product.id_prod}/price-full?dias=${dias}`)
+        serieHistorial = (fullData.series || []).map((s: any) => ({
+          fecha: s.fecha,
+          precio: s.precio
+        }))
+      } catch (e2) {
+        console.log('Sin historial, usando precios actuales de competidores')
+      }
     }
 
-    // 4. COMBINAR: historial + competidores actuales
-    // Si hay historial, lo usamos como base y agregamos competidores al final
-    // Si NO hay historial, usamos solo los competidores
+    // 4. COMBINAR: priorizar historial real sobre snapshot de competidores
+    // El último punto siempre es el precio actual del producto seleccionado
+    const precioActual = {
+      fecha: new Date().toISOString(),
+      precio: parseFloat(props.product.precio_prod) || 0
+    }
+
     if (serieHistorial.length >= 2) {
-      chartData.value = [...serieHistorial, ...serieCompetidores]
+      // Asegurar que el último punto sea el precio actual de este producto
+      chartData.value = [...serieHistorial, precioActual]
     } else {
-      chartData.value = serieCompetidores
+      // Sin historial: mostrar evolución de precios entre competidores + precio actual
+      chartData.value = [...serieCompetidores, precioActual]
     }
 
     priceHistory.value = chartData.value
