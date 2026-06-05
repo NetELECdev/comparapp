@@ -30,6 +30,11 @@ export default defineNuxtConfig({
   },
   nitro: {
     preset: 'static',
+    prerender: {
+      crawlLinks: false,
+      routes: ['/'],
+      ignore: ['/terms', '/components']
+    },
     devProxy: {
       '/api/': {
         target: 'http://localhost:8000/api/v1',
