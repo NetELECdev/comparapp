@@ -293,6 +293,17 @@ def get_categorias(db: DatabaseManager = Depends(get_db)):
         print(f"❌ Error obteniendo categorias: {e}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo categorias: {str(e)}")
 
+@app.get("/api/v1/medidas", tags=["Categorias"])
+def get_medidas(db: DatabaseManager = Depends(get_db)):
+    """Obtiene todas las unidades de medida desde cate_medida."""
+    try:
+        response = db.supabase.table("cate_medida").select("*").order("id").execute()
+        return [{"id": r["id"], "nombre": r["nombre_medida"]} for r in (response.data or [])]
+    except Exception as e:
+        print(f"❌ Error obteniendo medidas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------------------------------------------------
 # ═══════════════════════════════════════════════════
 # ENDPOINTS DE PRODUCTOS - ORDEN CRITICO EN FASTAPI

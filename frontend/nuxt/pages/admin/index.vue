@@ -411,7 +411,7 @@
                 <label>Categoría *</label>
                 <select v-model="formProducto.cate_prod" required>
                   <option value="">Seleccionar...</option>
-                  <option v-for="cat in categoriasUnicas" :key="cat" :value="cat">{{ cat }}</option>
+                  <option v-for="cat in categoriasBD" :key="cat.id" :value="cat.nombre">{{ cat.nombre }}</option>
                 </select>
                 <input v-if="formProducto.cate_prod === '__nueva__'" v-model="nuevaCategoria" placeholder="Nueva categoría..." class="mt-2" />
               </div>
@@ -430,15 +430,7 @@
               <div class="form-group">
                 <label>Unidad</label>
                 <select v-model="formProducto.unidad_prod">
-                  <option value="Unidad">Unidad</option>
-                  <option value="Gramo">Gramo</option>
-                  <option value="Kilogramo">Kilogramo</option>
-                  <option value="Litro">Litro</option>
-                  <option value="Mililitro">Mililitro</option>
-                  <option value="Centímetro">Centímetro</option>
-                  <option value="Metro">Metro</option>
-                  <option value="Paquete">Paquete</option>
-                  <option value="Caja">Caja</option>
+                  <option v-for="m in medidas" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
                 </select>
               </div>
               <div class="form-group full">
@@ -623,6 +615,8 @@ const deleting = ref(false)
 
 const productos = ref<Producto[]>([])
 const proveedores = ref<Proveedor[]>([])
+const medidas = ref<{id: number, nombre: string}[]>([])
+const categoriasBD = ref<{id: number, nombre: string}[]>([])
 const ofertas = ref<Oferta[]>([])
 const loadingOfertas = ref(false)
 
@@ -1022,12 +1016,16 @@ async function loadOfertas() {
 async function loadData() {
   loading.value = true
   try {
-    const [prodRes, provRes] = await Promise.all([
+    const [prodRes, provRes, medidasRes, catsRes] = await Promise.all([
       $fetch<{ count: number; results: Producto[] }>(`${config.public.apiBase}/products`).catch(() => ({ results: [] })),
-      $fetch<{ count: number; results: Proveedor[] }>(`${config.public.apiBase}/proveedores`).catch(() => ({ results: [] }))
+      $fetch<{ count: number; results: Proveedor[] }>(`${config.public.apiBase}/proveedores`).catch(() => ({ results: [] })),
+      $fetch<{id: number, nombre: string}[]>(`${config.public.apiBase}/medidas`).catch(() => []),
+      $fetch<{id_cate: string, nombre_cate: string}[]>(`${config.public.apiBase}/categorias`).catch(() => [])
     ])
     productos.value = prodRes.results || []
     proveedores.value = provRes.results || []
+    medidas.value = medidasRes || []
+    categoriasBD.value = (catsRes || []).map((c: any) => ({ id: c.id_cate, nombre: c.nombre_cate }))
     await loadOfertas()
   } catch (err) {
     console.error('Error cargando datos:', err)
