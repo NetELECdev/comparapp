@@ -1,5 +1,5 @@
 [build]
-  command = "npm run generate"
+  command = "mkdir -p .netlify/functions-internal/server && npm run generate"
   publish = ".output/public"
 
 [build.environment]
