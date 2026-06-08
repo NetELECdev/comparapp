@@ -217,6 +217,8 @@ interface Producto {
   total_competidores?: number
   precio_min_grupo?: number
   precio_max_grupo?: number
+  cantidad_prod?: number
+  unidad_prod?: string
 }
 
 interface ComparacionItem extends Producto {
@@ -326,6 +328,12 @@ const productosOrdenados = computed(() => {
       return list.sort((a, b) => a.cate_prod.localeCompare(b.cate_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     case 'marca':
       return list.sort((a, b) => a.marca_prod.localeCompare(b.marca_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+    case 'fecha':
+      return list.sort((a, b) => {
+        const dA = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
+        const dB = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
+        return dB - dA  // más reciente primero
+      })
     default:
       return list
   }

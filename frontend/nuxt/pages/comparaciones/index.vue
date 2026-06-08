@@ -95,6 +95,9 @@
                 <div class="item-price-col">
                   <span class="item-unit">${{ formatPrice(Number(prod.precio_prod)) }}</span>
                   <span class="item-total">${{ formatPrice(Number(prod.precio_prod) * prod.cantidad) }}</span>
+                  <span v-if="formatPrecioNorm(prod)" class="item-precio-norm">
+                    {{ formatPrecioNorm(prod) }}
+                  </span>
                 </div>
                 <button class="item-remove" @click="removerProducto(prod.id_prod)" aria-label="Quitar">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -122,10 +125,23 @@
               <p class="item-brand">{{ prod.marca_prod }}</p>
               <p class="item-venue">{{ prod.provee_prod }}</p>
               <div class="item-qty">Cantidad: {{ prod.cantidad }}</div>
+              <div class="item-fecha-distancia">
+                <div v-if="prod.fecha_prod" class="item-fecha">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  {{ formatFecha(prod.fecha_prod) }}
+                </div>
+                <div v-if="distanciasPorProveedor[prod.provee_prod]" class="item-distancia">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                  {{ distanciasPorProveedor[prod.provee_prod] }}
+                </div>
+              </div>
             </div>
             <div class="item-price-col">
               <span class="item-unit">${{ formatPrice(Number(prod.precio_prod)) }}</span>
               <span class="item-total">${{ formatPrice(Number(prod.precio_prod) * prod.cantidad) }}</span>
+              <span v-if="formatPrecioNorm(prod)" class="item-precio-norm">
+                {{ formatPrecioNorm(prod) }}
+              </span>
             </div>
             <button class="item-remove" @click="removerProducto(prod.id_prod)" aria-label="Quitar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -220,6 +236,9 @@ interface Producto {
   imagen_prod: string | null
   provee_prod: string
   cantidad: number
+  fecha_prod?: string
+  cantidad_prod?: number
+  unidad_prod?: string
 }
 
 interface HistorialItem {
@@ -233,20 +252,76 @@ const productos = ref<Producto[]>([])
 const historial = ref<HistorialItem[]>([])
 const sortBy = ref('default')
 
+// Ubicación del usuario y distancias a proveedores
+const userLat = ref<number | null>(null)
+const userLng = ref<number | null>(null)
+const distanciasPorProveedor = ref<Record<string, string>>({})
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2
+  return R * 2 * Math.asin(Math.sqrt(a))
+}
+
+function formatDistancia(km: number): string {
+  return km < 1 ? `${(km * 1000).toFixed(0)} m` : `${km.toFixed(1)} km`
+}
+
+async function cargarDistancias() {
+  if (!navigator.geolocation) return
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    userLat.value = pos.coords.latitude
+    userLng.value = pos.coords.longitude
+    try {
+      const config = useRuntimeConfig()
+      const res = await $fetch<{ results: any[] }>(`${config.public.apiBase}/proveedores`)
+      const map: Record<string, string> = {}
+      for (const prov of (res.results || [])) {
+        if (prov.lat && prov.lng && userLat.value && userLng.value) {
+          const km = haversine(userLat.value, userLng.value, prov.lat, prov.lng)
+          map[prov.nombre_provee] = formatDistancia(km)
+        }
+      }
+      distanciasPorProveedor.value = map
+    } catch {}
+  }, () => {}, { timeout: 5000 })
+}
+
 const sortOptions = [
-  { label: 'Original', value: 'default' },
+  { label: 'Precio/Unidad', value: 'precio_unidad' },
   { label: 'Precio ↑', value: 'precio_asc' },
   { label: 'Precio ↓', value: 'precio_desc' },
   { label: 'Proveedor', value: 'proveedor' },
+  { label: 'Fecha', value: 'fecha' },
 ]
 
 const productosOrdenados = computed(() => {
   const arr = [...productos.value]
   switch (sortBy.value) {
+    case 'precio_unidad':
+      return arr.sort((a, b) => {
+        const normA = precioNormalizado(a)
+        const normB = precioNormalizado(b)
+        // Productos sin precio normalizado van al final
+        if (!normA && !normB) return 0
+        if (!normA) return 1
+        if (!normB) return -1
+        // Solo comparar si son del mismo grupo de unidad
+        if (normA.unidad !== normB.unidad) return normA.unidad.localeCompare(normB.unidad)
+        return normA.precio - normB.precio
+      })
     case 'precio_asc':
       return arr.sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
     case 'precio_desc':
       return arr.sort((a, b) => Number(b.precio_prod) - Number(a.precio_prod))
+    case 'fecha':
+      return arr.sort((a, b) => {
+        const dateA = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
+        const dateB = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
+        return dateB - dateA  // más reciente primero
+      })
     default:
       return arr
   }
@@ -276,6 +351,7 @@ const proveedoresUnicos = computed(() => {
 })
 
 onMounted(() => {
+  cargarDistancias()
   const stored = localStorage.getItem('comparapp_comparacion')
   if (stored) {
     try { productos.value = JSON.parse(stored) } catch {}
@@ -285,6 +361,45 @@ onMounted(() => {
   if (storedHist) {
     try { historial.value = JSON.parse(storedHist) } catch {}
   }
+})
+
+// ── Precio por unidad normalizada ──────────────────────────────
+const GRUPOS_UNIDAD: Record<string, { base: string; factor: number }> = {
+  'Kilogramo': { base: 'kg', factor: 1 },
+  'Gramo':     { base: 'kg', factor: 0.001 },
+  'Litro':     { base: 'L',  factor: 1 },
+  'Mililitro': { base: 'L',  factor: 0.001 },
+  'CC':        { base: 'L',  factor: 0.001 },
+  'Metro':     { base: 'm',  factor: 1 },
+  'Centímetro':{ base: 'm',  factor: 0.01 },
+}
+
+function precioNormalizado(prod: Producto): { precio: number; unidad: string } | null {
+  const unidad = prod.unidad_prod || ''
+  const cantidad = Number(prod.cantidad_prod) || 0
+  const precio = Number(prod.precio_prod) || 0
+  if (!unidad || cantidad <= 0 || precio <= 0) return null
+  const grupo = GRUPOS_UNIDAD[unidad]
+  if (!grupo) return null
+  const cantidadBase = cantidad * grupo.factor
+  if (cantidadBase <= 0) return null
+  return { precio: precio / cantidadBase, unidad: grupo.base }
+}
+
+function formatPrecioNorm(prod: Producto): string | null {
+  const norm = precioNormalizado(prod)
+  if (!norm) return null
+  return `precio x ${norm.unidad}: $${norm.precio.toFixed(1)}`
+}
+
+// Mostrar comparación de precio por unidad si hay productos del mismo grupo
+const mostrarPrecioNorm = computed(() => {
+  const unidades = new Set(
+    productos.value
+      .map(p => GRUPOS_UNIDAD[p.unidad_prod || '']?.base)
+      .filter(Boolean)
+  )
+  return unidades.size > 0
 })
 
 const formatPrice = (price: number): string => {
@@ -707,6 +822,14 @@ const recargarHistorial = (h: HistorialItem) => {
   flex-shrink: 0;
 }
 
+.item-precio-norm {
+  font-size: 0.68rem;
+  color: var(--accent-emerald);
+  font-weight: 500;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
 .item-unit {
   color: var(--text-muted);
   font-size: 0.75rem;
@@ -890,6 +1013,29 @@ const recargarHistorial = (h: HistorialItem) => {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+}
+
+.item-fecha-distancia {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.item-distancia {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--accent-gold);
+}
+.item-fecha {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .historial-fecha {

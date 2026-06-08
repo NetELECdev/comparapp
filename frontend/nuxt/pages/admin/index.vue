@@ -424,14 +424,35 @@
                 <input v-model="formProducto.precio_prod" type="number" step="0.01" required placeholder="1499.00" />
               </div>
               <div class="form-group">
-                <label>Cantidad</label>
+                <label>Cantidad del envase</label>
                 <input v-model="formProducto.cantidad_prod" type="number" placeholder="200" />
+                <span class="form-hint">
+                  <template v-if="formProducto.unidad_prod === 'Unidad'">
+                    Ej: pañales x8 → poner 8
+                  </template>
+                  <template v-else-if="formProducto.unidad_prod === 'Gramo'">
+                    Ej: arroz 500g → poner 500
+                  </template>
+                  <template v-else-if="formProducto.unidad_prod === 'Mililitro'">
+                    Ej: jugo 500ml → poner 500
+                  </template>
+                  <template v-else-if="formProducto.unidad_prod === 'Kilogramo'">
+                    Ej: carne 1kg → poner 1
+                  </template>
+                  <template v-else-if="formProducto.unidad_prod === 'Litro'">
+                    Ej: aceite 1.5L → poner 1.5
+                  </template>
+                  <template v-else>
+                    Cantidad real del envase en la unidad seleccionada
+                  </template>
+                </span>
               </div>
               <div class="form-group">
-                <label>Unidad</label>
+                <label>Unidad de medida</label>
                 <select v-model="formProducto.unidad_prod">
                   <option v-for="m in medidas" :key="m.id" :value="m.nombre">{{ m.nombre }}</option>
                 </select>
+                <span class="form-hint">Unidad del envase (no de la unidad mínima)</span>
               </div>
               <div class="form-group full">
                 <label>Proveedor *</label>
@@ -1229,6 +1250,7 @@ onMounted(() => { loadData() })
 .oferta-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-hint { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; font-style: italic; line-height: 1.4; }
 .form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
 .form-group input, .form-group select, .form-group textarea {
   padding: 0.55rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-subtle);

@@ -198,6 +198,8 @@ interface Producto {
   provee_prod: string
   fecha_prod?: string
   activo_prod: boolean
+  cantidad_prod?: number
+  unidad_prod?: string
 }
 
 interface ComparacionItem extends Producto {
@@ -229,6 +231,7 @@ const sortOptions = [
   { label: 'Nombre', value: 'nombre' },
   { label: 'Precio ↓', value: 'precio_asc' },
   { label: 'Precio ↑', value: 'precio_desc' },
+  { label: 'Fecha', value: 'fecha' },
   { label: 'Categoría', value: 'categoria' },
   { label: 'Marca', value: 'marca' },
   { label: 'Proveedor', value: 'proveedor' },
@@ -266,6 +269,12 @@ const productosOrdenados = computed(() => {
       return list.sort((a, b) => a.marca_prod.localeCompare(b.marca_prod, 'es'))
     case 'proveedor':
       return list.sort((a, b) => a.provee_prod.localeCompare(b.provee_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+    case 'fecha':
+      return list.sort((a, b) => {
+        const dA = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
+        const dB = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
+        return dB - dA
+      })
     default:
       return list
   }
