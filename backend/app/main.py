@@ -2000,6 +2000,100 @@ def delete_item(
         raise HTTPException(status_code=400, detail=msg)
     return {"message": msg}
 
+# ─────────────────────────────────────────────────────────────
+# ENDPOINTS DE FAVORITOS 
+# ─────────────────────────────────────────────────────────────
+
+class FavoritoCreate(BaseModel):
+    id_prod: str
+
+@app.get("/api/v1/favoritos", tags=["Favoritos"])
+def get_favoritos(
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """Obtiene los favoritos del usuario autenticado con datos del producto."""
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    try:
+        res = db.supabase.table("favoritos") \
+            .select("id_prod, fecha_agregado, producto(id_prod, nombre_prod, precio_prod, marca_prod, cate_prod, imagen_prod, provee_prod, unidad_prod, cantidad_prod)") \
+            .eq("user_id", db.current_user["id"]) \
+            .order("fecha_agregado", desc=True) \
+            .execute()
+
+        # Aplanar: devolver datos del producto directamente
+        results = []
+        for row in (res.data or []):
+            prod = row.get("producto") or {}
+            if prod:
+                prod["fecha_favorito"] = row.get("fecha_agregado")
+                results.append(prod)
+
+        return {"count": len(results), "results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/favoritos", tags=["Favoritos"])
+def add_favorito(
+    fav: FavoritoCreate,
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """Agrega un producto a favoritos (ignora duplicados)."""
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    try:
+        # Verificar si ya existe
+        existing = db.supabase.table("favoritos") \
+            .select("id") \
+            .eq("user_id", db.current_user["id"]) \
+            .eq("id_prod", fav.id_prod) \
+            .execute()
+
+        if existing.data:
+            return {"message": "Ya en favoritos", "created": False}
+
+        res = db.supabase.table("favoritos").insert({
+            "user_id": db.current_user["id"],
+            "id_prod": fav.id_prod,
+        }).execute()
+
+        return {"message": "Agregado a favoritos", "created": True, "data": res.data[0] if res.data else {}}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/v1/favoritos/{id_prod}", tags=["Favoritos"])
+def remove_favorito(
+    id_prod: str,
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """Elimina un producto de favoritos."""
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    try:
+        db.supabase.table("favoritos") \
+            .delete() \
+            .eq("user_id", db.current_user["id"]) \
+            .eq("id_prod", id_prod) \
+            .execute()
+
+        return {"message": "Eliminado de favoritos"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ---------------------------------------------------
 # Punto de entrada (para ejecutar con uvicorn)

@@ -80,7 +80,7 @@
             v-for="p in products.slice(0, 5)"
             :key="p.id_prod"
             class="recent-item"
-            @click="navigateTo(`/Productos/lista?q=${encodeURIComponent(p.nombre_prod)}`)"
+            @click="navigateTo(`/productos/lista?q=${encodeURIComponent(p.nombre_prod)}`)"
           >
             <div class="recent-item-img">
               <img
@@ -101,7 +101,7 @@
           </article>
         </div>
 
-        <button v-if="products.length > 0" class="ver-mas" @click="navigateTo('/Productos')">
+        <button v-if="products.length > 0" class="ver-mas" @click="navigateTo('/productos')">
           Ver todos los productos
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
@@ -120,7 +120,7 @@
         </svg>
         <span>Inicio</span>
       </button>
-      <button class="bnav-btn" @click="navigateTo('/Productos')" aria-label="Productos">
+      <button class="bnav-btn" @click="navigateTo('/productos')" aria-label="Productos">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m7.5 4.27 9 5.15"/>
           <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
@@ -190,7 +190,7 @@ const menuItems = ref([
   { title: 'Favoritos',   imageUrl: `${SUPABASE}/favoritos.jpg`,   action: () => navigateTo('/favoritos') },
   { title: 'Historial',   imageUrl: `${SUPABASE}/historial.jpg`,   action: () => navigateTo('/comparaciones/historial') },
   { title: 'Listas',      imageUrl: `${SUPABASE}/lista.jpg`,       action: () => navigateTo('/listas') },
-  { title: 'Productos',   imageUrl: `${SUPABASE}/productos.jpg`,   action: () => navigateTo('/Productos') },
+  { title: 'Productos',   imageUrl: `${SUPABASE}/productos.jpg`,   action: () => navigateTo('/productos') },
   { title: 'Proveedores', imageUrl: `${SUPABASE}/proveedores.jpg`, action: () => navigateTo('/proveedores') },
   { title: 'Ofertas',     imageUrl: `${SUPABASE}/ofertas.jpg`,     action: () => navigateTo('/ofertas') },
   { title: 'Perfil',      imageUrl: `${SUPABASE}/admin.jpg`,       action: () => navigateTo('/perfil') },

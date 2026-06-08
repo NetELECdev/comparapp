@@ -51,7 +51,7 @@
           </div>
 
           <!-- Imagen -->
-          <div class="oferta-img" @click="navigateTo(`/Productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
+          <div class="oferta-img" @click="navigateTo(`/productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
             <img :src="oferta.producto?.imagen_prod || '/images/avatar_default.png'" :alt="oferta.producto?.nombre_prod || ''" />
           </div>
 
@@ -77,7 +77,7 @@
 
           <!-- Acciones -->
           <div class="oferta-actions">
-            <button class="ver-btn" @click="navigateTo(`/Productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
+            <button class="ver-btn" @click="navigateTo(`/productos/lista?q=${encodeURIComponent(oferta.producto?.nombre_prod || '')}`)">
               Ver producto
             </button>
           </div>
