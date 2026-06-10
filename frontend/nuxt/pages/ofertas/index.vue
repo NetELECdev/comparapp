@@ -59,8 +59,8 @@
           <div class="oferta-info">
             <span class="oferta-categoria">{{ oferta.producto?.cate_prod }}</span>
             <h3 class="oferta-nombre">{{ oferta.producto?.nombre_prod }}</h3>
-            <p class="oferta-proveedor" v-if="oferta.producto?.provee_prod">
-              🏪 {{ oferta.producto.provee_prod }}
+            <p class="oferta-comercio" v-if="oferta.producto?.comercio_prod">
+              🏪 {{ oferta.producto.comercio_prod }}
             </p>
 
             <!-- Precios -->
@@ -282,7 +282,7 @@ function calcularDescuento(normal, oferta) {
 }
 
 .oferta-marca { color: var(--text-secondary); font-size: 0.8rem; margin: 0; }
-.oferta-proveedor { color: rgba(245,240,235,0.4); font-size: 0.75rem; margin: 0; }
+.oferta-comercio { color: rgba(245,240,235,0.4); font-size: 0.75rem; margin: 0; }
 
 /* Precios */
 .oferta-precios {

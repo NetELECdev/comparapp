@@ -32,7 +32,7 @@ class ProductCreate(BaseModel):
     describe_prod: Optional[str] = None
     unidad_prod: Optional[str] = None
     cantidad_prod: Optional[int] = None
-    provee_prod: Optional[str] = None
+    comercio_prod: Optional[str] = None
     marca_prod: Optional[str] = None
     imagen_prod: Optional[str] = None
     activo_prod: Optional[bool] = True
@@ -217,7 +217,7 @@ def google_oauth_callback(
                 "email_user": user_email,
                 "nombre_completo": user_nombre,
                 "rol_user": "usuario",
-                "proveedor_oauth": "google"
+                "comercio_oauth": "google"
             }
             result = db.supabase.table("users").insert(new_user).execute()
             user_data = result.data[0] if result.data else new_user
@@ -342,7 +342,7 @@ def search_products_comparison(
 ):
     """
     Busca productos y devuelve datos enriquecidos con comparacion de precios
-    entre productos del mismo nombre (distintos proveedores).
+    entre productos del mismo nombre (distintos comercios).
     """
     try:
         import requests
@@ -362,7 +362,7 @@ def search_products_comparison(
         params = {
             "select": "*",
             "activo_prod": "eq.true",
-            "or": f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*,provee_prod.ilike.*{q}*)",
+            "or": f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*,comercio_prod.ilike.*{q}*)",
             "limit": limit
         }
 
@@ -472,11 +472,11 @@ def get_same_name_products(
 ):
     """
     Devuelve todos los productos con el mismo nombre que el producto dado.
-    Util para comparar precios entre proveedores.
+    Util para comparar precios entre comercios.
     """
     try:
         # Obtener el producto para saber su nombre
-        product = db.supabase.table('producto')            .select('nombre_prod, precio_prod, provee_prod, fecha_prod')            .eq('id_prod', product_id)            .eq('activo_prod', True)            .maybe_single()            .execute()
+        product = db.supabase.table('producto')            .select('nombre_prod, precio_prod, comercio_prod, fecha_prod')            .eq('id_prod', product_id)            .eq('activo_prod', True)            .maybe_single()            .execute()
 
         if not product.data:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -597,12 +597,12 @@ def delete_product(
 def get_price_history(
     product_id: str,
     dias: Optional[int] = Query(30, description="Dias hacia atras"),
-    todos_proveedores: Optional[bool] = Query(False, description="Incluir historial de todos los proveedores del mismo producto"),
+    todos_comercios: Optional[bool] = Query(False, description="Incluir historial de todos los comercios del mismo producto"),
     db: DatabaseManager = Depends(get_db)
 ):
     """
     Obtiene historial de precios de un producto para el gráfico.
-    Si todos_proveedores=true, agrega el historial de todos los competidores
+    Si todos_comercios=true, agrega el historial de todos los competidores
     (mismo nombre de producto) para mostrar la curva unificada del mercado.
     El último punto siempre es el precio actual del producto solicitado.
     """
@@ -615,7 +615,7 @@ def get_price_history(
         serie = list(response.data or [])
 
         # 2. Si se pide historial unificado, agregar historial de competidores
-        if todos_proveedores:
+        if todos_comercios:
             # Obtener nombre del producto actual
             prod_res = db.supabase.table("producto")                .select("nombre_prod, precio_prod")                .eq("id_prod", product_id)                .limit(1).execute()
 
@@ -651,7 +651,7 @@ def get_price_history(
         return {
             "product_id": product_id,
             "dias_consultados": dias,
-            "todos_proveedores": todos_proveedores,
+            "todos_comercios": todos_comercios,
             "count": len(series_mapped),
             "series": series_mapped,
             "history": serie  # compatibilidad con código anterior
@@ -768,6 +768,34 @@ def get_product_price_full(
 
         # 4. Stats
         todos_precios = [p["precio"] for p in series]
+
+        # Incluir precios actuales de todos los comercios con el mismo nombre
+        # FIX: usar ilike para case-insensitive + trim para espacios + logs DEBUG
+        try:
+            nombre_normalizado = nombre.strip()
+            print(f"DEBUG price-full: buscando productos con nombre='{nombre_normalizado}'")
+
+            otros_res = db.supabase.table('producto') \
+                .select('precio_prod, nombre_prod, comercio_prod') \
+                .ilike('nombre_prod', nombre_normalizado) \
+                .eq('activo_prod', True) \
+                .execute()
+
+            otros_precios = []
+            for otro in (otros_res.data or []):
+                if otro.get('precio_prod') is not None:
+                    p = float(otro['precio_prod'])
+                    otros_precios.append(p)
+                    todos_precios.append(p)
+
+            print(f"DEBUG price-full: encontrados={len(otros_res.data or [])}, "
+                  f"precios_otros={otros_precios}, "
+                  f"precio_min={min(todos_precios) if todos_precios else actual}, "
+                  f"precio_max={max(todos_precios) if todos_precios else actual}")
+        except Exception as e:
+            print(f"DEBUG price-full ERROR: {e}")
+            pass  # no crítico
+
         precio_min = min(todos_precios) if todos_precios else actual
         precio_max = max(todos_precios) if todos_precios else actual
         avg_price = round(sum(todos_precios) / len(todos_precios), 2) if todos_precios else actual
@@ -863,6 +891,36 @@ def get_historial_producto(
         precios_lista = [r['precio'] for r in registros]
         precios_lista.append(precio_actual)
 
+        # Incluir precios actuales de todos los comercios con el mismo producto
+        # para que el min/max sea real entre todos los competidores
+        # FIX: usar ilike para case-insensitive + trim + logs DEBUG
+        try:
+            # El nombre ya lo tenemos de prod_res más arriba
+            nombre_prod = prod_res.data[0].get('nombre_prod', '').strip()
+            print(f"DEBUG historial: buscando productos con nombre='{nombre_prod}'")
+
+            if nombre_prod:
+                otros_res = db.supabase.table('producto') \
+                    .select('precio_prod, nombre_prod, comercio_prod') \
+                    .ilike('nombre_prod', nombre_prod) \
+                    .eq('activo_prod', True) \
+                    .execute()
+
+                otros_precios = []
+                for otro in (otros_res.data or []):
+                    if otro.get('precio_prod') is not None:
+                        p = float(otro['precio_prod'])
+                        otros_precios.append(p)
+                        precios_lista.append(p)
+
+                print(f"DEBUG historial: encontrados={len(otros_res.data or [])}, "
+                      f"precios_otros={otros_precios}, "
+                      f"precio_min={min(precios_lista) if precios_lista else None}, "
+                      f"precio_max={max(precios_lista) if precios_lista else None}")
+        except Exception as e:
+            print(f"DEBUG historial ERROR: {e}")
+            pass  # no crítico
+
         precio_minimo = min(precios_lista) if precios_lista else None
         precio_maximo = max(precios_lista) if precios_lista else None
 
@@ -920,51 +978,51 @@ def registrar_precio_manual(
 
 
 # ---------------------------------------------------
-# Endpoints de proveedores
+# Endpoints de comercios
 # ---------------------------------------------------
 
-@app.get("/api/v1/proveedores", tags=["Proveedores"])
-def search_proveedores(
+@app.get("/api/v1/comercios", tags=["Comercios"])
+def search_comercios(
     search: Optional[str] = Query("", description="Texto a buscar (nombre o representante)"),
     sort_by: Optional[str] = Query("nombre", description="Campo de ordenamiento"),
     db: DatabaseManager = Depends(get_db)
 ):
-    proveedores, error = db.search_proveedores(search, sort_by)
+    comercios, error = db.search_comercios(search, sort_by)
     if error:
         raise HTTPException(status_code=400, detail=error)
-    return {"count": len(proveedores), "results": proveedores}
+    return {"count": len(comercios), "results": comercios}
 
-@app.get("/api/v1/proveedores/{proveedor_id}", tags=["Proveedores"])
-def get_proveedor_by_id(proveedor_id: str, db: DatabaseManager = Depends(get_db)):
-    proveedor, error = db.get_proveedor_by_id(proveedor_id)
+@app.get("/api/v1/comercios/{comercio_id}", tags=["Comercios"])
+def get_comercio_by_id(comercio_id: str, db: DatabaseManager = Depends(get_db)):
+    comercio, error = db.get_comercio_by_id(comercio_id)
     if error:
         raise HTTPException(status_code=404, detail=error)
-    return proveedor
+    return comercio
 
-@app.post("/api/v1/proveedores", tags=["Proveedores"])
-def create_proveedor(
-    proveedor_data: dict = Body(...),
+@app.post("/api/v1/comercios", tags=["Comercios"])
+def create_comerdor(
+    comercio_data: dict = Body(...),
     db: DatabaseManager = Depends(get_db)
 ):
-    proveedor, error = db.insert_proveedor(proveedor_data)
+    comercio, error = db.insert_comercio(comercio_data)
     if error:
         raise HTTPException(status_code=400, detail=error)
-    return {"message": "Proveedor agregado correctamente", "data": proveedor}
+    return {"message": "Comercio agregado correctamente", "data": comercio}
 
-@app.put("/api/v1/proveedores/{proveedor_id}", tags=["Proveedores"])
-def update_proveedor(
-    proveedor_id: str,
+@app.put("/api/v1/comercios/{comercio_id}", tags=["Comercios"])
+def update_comerdor(
+    comercio_id: str,
     update_data: dict = Body(...),
     db: DatabaseManager = Depends(get_db)
 ):
-    proveedor, error = db.update_proveedor(proveedor_id, update_data)
+    comercio, error = db.update_comerdor(comercio_id, update_data)
     if error:
         raise HTTPException(status_code=400, detail=error)
-    return {"message": "Proveedor actualizado", "data": proveedor}
+    return {"message": "Comercio actualizado", "data": comercio}
 
-@app.delete("/api/v1/proveedores/{proveedor_id}", tags=["Proveedores"])
-def delete_proveedor(proveedor_id: str, db: DatabaseManager = Depends(get_db)):
-    success, msg = db.delete_proveedor(proveedor_id)
+@app.delete("/api/v1/comercios/{comercio_id}", tags=["Comercios"])
+def delete_comerdor(comercio_id: str, db: DatabaseManager = Depends(get_db)):
+    success, msg = db.delete_comerdor(comercio_id)
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return {"message": msg}
@@ -1009,7 +1067,7 @@ def shutdown_event():
 @app.get("/api/v1/ofertas", tags=["Ofertas"])
 def get_ofertas_vigentes(
     categoria: Optional[str] = Query(None, description="Filtrar por categoria"),
-    proveedor: Optional[str] = Query(None, description="Filtrar por proveedor"),
+    comercio: Optional[str] = Query(None, description="Filtrar por comercio"),
     limit: Optional[int] = Query(50, description="Limite de resultados"),
     db: DatabaseManager = Depends(get_db)
 ):
@@ -1018,7 +1076,7 @@ def get_ofertas_vigentes(
         # Intentar con la vista, si no existe usar la tabla directa
         # Tabla ofertas con join a producto
         try:
-            query = db.supabase.table('ofertas')                .select('*, producto(nombre_prod, cate_prod, imagen_prod, provee_prod)')                .eq('activa', True)                .gte('fecha_fin', datetime.now().isoformat())
+            query = db.supabase.table('ofertas')                .select('*, producto(nombre_prod, cate_prod, imagen_prod, comercio_prod)')                .eq('activa', True)                .gte('fecha_fin', datetime.now().isoformat())
             response = query.limit(limit).order('descuento_pct', desc=True).execute()
         except Exception as join_err:
             print(f"⚠️ Join falló ({join_err}), intentando sin join")
@@ -1240,9 +1298,9 @@ def get_dashboard_stats(
         prod_response = db.supabase.table('producto').select('*', count='exact').eq('activo_prod', True).execute()
         total_productos = prod_response.count if hasattr(prod_response, 'count') else len(prod_response.data)
 
-        # Total proveedores
-        prov_response = db.supabase.table('proveedor').select('*', count='exact').eq('activo_prov', True).execute()
-        total_proveedores = prov_response.count if hasattr(prov_response, 'count') else len(prov_response.data)
+        # Total comercios
+        prov_response = db.supabase.table('comercio').select('*', count='exact').eq('activo_prov', True).execute()
+        total_comercios = prov_response.count if hasattr(prov_response, 'count') else len(prov_response.data)
 
         # Total ofertas vigentes
         ofertas_response = db.supabase.table('ofertas').select('*', count='exact').eq('activo_oferta', True).execute()
@@ -1254,7 +1312,7 @@ def get_dashboard_stats(
 
         return {
             "total_productos": total_productos,
-            "total_proveedores": total_proveedores,
+            "total_comercios": total_comercios,
             "total_ofertas": total_ofertas,
             "total_usuarios": total_usuarios
         }
@@ -1308,8 +1366,8 @@ def optimize_lista(
     db: DatabaseManager = Depends(get_db)
 ):
     """
-    Calcula el costo total de la lista por cada proveedor.
-    Incluye: productos por proveedor, faltantes, distancia al usuario,
+    Calcula el costo total de la lista por cada comercio.
+    Incluye: productos por comercio, faltantes, distancia al usuario,
     alternativa completa, y sugerencia de división óptima.
     """
     set_user_from_token(db, authorization)
@@ -1342,65 +1400,65 @@ def optimize_lista(
         items = lista_res.data.get('lista_item', [])
         if not items:
             return {"lista_id": lista_id, "items_count": 0, "message": "La lista está vacía",
-                    "proveedores": [], "mejor_opcion": None, "division_sugerida": None}
+                    "comercios": [], "mejor_opcion": None, "division_sugerida": None}
 
-        # 2. Cargar coordenadas de todos los proveedores activos
-        prov_res = db.supabase.table('proveedor')\
-            .select('nombre_provee, ubicacion_provee, direccion_provee')\
-            .eq('activo_provee', True)\
+        # 2. Cargar coordenadas de todos los comercios activos
+        prov_res = db.supabase.table('comercio')\
+            .select('nombre_comer, ubicacion_comer, direccion_comer')\
+            .eq('activo_comer', True)\
             .execute()
 
-        coords_por_proveedor = {}
+        coords_por_comercio = {}
         for prov in (prov_res.data or []):
-            nombre = prov.get('nombre_provee', '')
-            coords = db._parse_wkb_point(prov.get('ubicacion_provee') or '')
+            nombre = prov.get('nombre_comer', '')
+            coords = db._parse_wkb_point(prov.get('ubicacion_comer') or '')
             distancia = haversine(user_lat, user_lng, coords.get('lat'), coords.get('lng'))
-            coords_por_proveedor[nombre] = {
+            coords_por_comercio[nombre] = {
                 'lat': coords.get('lat'),
                 'lng': coords.get('lng'),
                 'distancia_km': distancia,
-                'direccion': prov.get('direccion_provee', '')
+                'direccion': prov.get('direccion_comer', '')
             }
 
         # 3. Para cada item, buscar productos coincidentes
         productos_por_item = {}
-        todos_proveedores = set()
+        todos_comercios = set()
 
         for item in items:
             nombre_item = item.get('nombre_item', '').strip()
             if not nombre_item:
                 continue
             prod_res = db.supabase.table('producto')\
-                .select('id_prod, nombre_prod, precio_prod, provee_prod, marca_prod, unidad_prod, cantidad_prod')\
+                .select('id_prod, nombre_prod, precio_prod, comercio_prod, marca_prod, unidad_prod, cantidad_prod')\
                 .eq('activo_prod', True)\
                 .ilike('nombre_prod', f'%{nombre_item}%')\
                 .execute()
             productos = prod_res.data or []
             productos_por_item[item['id_item']] = productos
             for p in productos:
-                todos_proveedores.add(p.get('provee_prod', 'Desconocido'))
+                todos_comercios.add(p.get('comercio_prod', 'Desconocido'))
 
-        # 4. Calcular costo por proveedor con detalle de productos
-        proveedores_data = {}
-        for proveedor in todos_proveedores:
+        # 4. Calcular costo por comercio con detalle de productos
+        comercios_data = {}
+        for comercio in todos_comercios:
             total = 0
             items_encontrados = 0
             items_faltantes = []
-            detalle_productos = []  # productos que SÍ tiene este proveedor
+            detalle_productos = []  # productos que SÍ tiene este comercio
 
             for item in items:
                 item_id = item['id_item']
                 cantidad = item.get('cantidad', 1)
                 productos = productos_por_item.get(item_id, [])
 
-                producto_proveedor = None
+                producto_comercio = None
                 for p in productos:
-                    if p.get('provee_prod') == proveedor:
-                        if not producto_proveedor or float(p['precio_prod']) < float(producto_proveedor['precio_prod']):
-                            producto_proveedor = p
+                    if p.get('comercio_prod') == comercio:
+                        if not producto_comercio or float(p['precio_prod']) < float(producto_comercio['precio_prod']):
+                            producto_comercio = p
 
-                if producto_proveedor:
-                    precio = float(producto_proveedor['precio_prod'])
+                if producto_comercio:
+                    precio = float(producto_comercio['precio_prod'])
                     total += precio * cantidad
                     items_encontrados += 1
                     detalle_productos.append({
@@ -1412,9 +1470,9 @@ def optimize_lista(
                 else:
                     items_faltantes.append(item['nombre_item'])
 
-            info_coords = coords_por_proveedor.get(proveedor, {})
-            proveedores_data[proveedor] = {
-                "proveedor": proveedor,
+            info_coords = coords_por_comercio.get(comercio, {})
+            comercios_data[comercio] = {
+                "comercio": comercio,
                 "total": round(total, 2),
                 "items_encontrados": items_encontrados,
                 "items_faltantes": items_faltantes,
@@ -1425,23 +1483,23 @@ def optimize_lista(
             }
 
         # 5. Ordenar: primero los que tienen más items, luego por precio
-        proveedores_ordenados = sorted(
-            proveedores_data.values(),
+        comercios_ordenados = sorted(
+            comercios_data.values(),
             key=lambda x: (-x['items_encontrados'], x['total'])
         )
 
         # 6. Mejor opción = mayor cobertura al menor precio
-        mejor_opcion = proveedores_ordenados[0] if proveedores_ordenados else None
+        mejor_opcion = comercios_ordenados[0] if comercios_ordenados else None
 
         ahorro_vs_peor = 0
-        if len(proveedores_ordenados) > 1:
-            peor = max(proveedores_ordenados, key=lambda x: x['total'])
+        if len(comercios_ordenados) > 1:
+            peor = max(comercios_ordenados, key=lambda x: x['total'])
             if mejor_opcion:
                 ahorro_vs_peor = round(peor['total'] - mejor_opcion['total'], 2)
 
-        # 7. Proveedor de faltantes: el que tiene el mejor precio para los
-        #    productos que le faltan al mejor proveedor
-        proveedor_faltantes = None
+        # 7. Comercio de faltantes: el que tiene el mejor precio para los
+        #    productos que le faltan al mejor comercio
+        comercio_faltantes = None
         if mejor_opcion and mejor_opcion['items_faltantes']:
             faltantes_data = defaultdict(lambda: {"items": [], "subtotal": 0})
 
@@ -1454,11 +1512,11 @@ def optimize_lista(
                 cantidad = item_obj.get('cantidad', 1)
                 productos = productos_por_item.get(item_id, [])
 
-                # Excluir el proveedor principal — buscar el más barato entre el resto
-                candidatos = [p for p in productos if p.get('provee_prod') != mejor_opcion['proveedor']]
+                # Excluir el comercio principal — buscar el más barato entre el resto
+                candidatos = [p for p in productos if p.get('comercio_prod') != mejor_opcion['comercio']]
                 if candidatos:
                     mas_barato = min(candidatos, key=lambda p: float(p['precio_prod']))
-                    prov_f = mas_barato['provee_prod']
+                    prov_f = mas_barato['comercio_prod']
                     precio = float(mas_barato['precio_prod']) * cantidad
                     faltantes_data[prov_f]['items'].append({
                         "nombre": nombre_faltante,
@@ -1469,25 +1527,25 @@ def optimize_lista(
                     faltantes_data[prov_f]['subtotal'] += precio
 
             if faltantes_data:
-                # El proveedor que cubre más faltantes al menor costo
+                # El comercio que cubre más faltantes al menor costo
                 mejor_faltante_prov = min(faltantes_data.items(), key=lambda x: x[1]['subtotal'])
                 prov_nombre = mejor_faltante_prov[0]
-                info_coords_f = coords_por_proveedor.get(prov_nombre, {})
-                proveedor_faltantes = {
-                    "proveedor": prov_nombre,
+                info_coords_f = coords_por_comercio.get(prov_nombre, {})
+                comercio_faltantes = {
+                    "comercio": prov_nombre,
                     "items": mejor_faltante_prov[1]['items'],
                     "subtotal": round(mejor_faltante_prov[1]['subtotal'], 2),
                     "distancia_km": info_coords_f.get('distancia_km'),
                     "direccion": info_coords_f.get('direccion', '')
                 }
 
-        # 8. Alternativa completa: el proveedor completo más barato (distinto al mejor)
+        # 8. Alternativa completa: el comercio completo más barato (distinto al mejor)
         alternativa_completa = None
-        completos = [p for p in proveedores_ordenados if p['completo'] and (not mejor_opcion or p['proveedor'] != mejor_opcion['proveedor'])]
+        completos = [p for p in comercios_ordenados if p['completo'] and (not mejor_opcion or p['comercio'] != mejor_opcion['comercio'])]
         if completos:
             mejor_completo = min(completos, key=lambda x: x['total'])
             alternativa_completa = {
-                "proveedor": mejor_completo['proveedor'],
+                "comercio": mejor_completo['comercio'],
                 "total": mejor_completo['total'],
                 "distancia_km": mejor_completo.get('distancia_km'),
                 "direccion": mejor_completo.get('direccion', '')
@@ -1503,7 +1561,7 @@ def optimize_lista(
             productos = productos_por_item.get(item_id, [])
             if productos:
                 mas_barato = min(productos, key=lambda p: float(p['precio_prod']))
-                prov = mas_barato['provee_prod']
+                prov = mas_barato['comercio_prod']
                 precio = float(mas_barato['precio_prod']) * cantidad
                 division[prov]['items'].append({
                     "nombre": item['nombre_item'],
@@ -1516,9 +1574,9 @@ def optimize_lista(
 
         division_formateada = []
         for prov, data in sorted(division.items(), key=lambda x: x[1]['subtotal']):
-            info_coords_d = coords_por_proveedor.get(prov, {})
+            info_coords_d = coords_por_comercio.get(prov, {})
             division_formateada.append({
-                "proveedor": prov,
+                "comercio": prov,
                 "items": data['items'],
                 "subtotal": round(data['subtotal'], 2),
                 "distancia_km": info_coords_d.get('distancia_km'),
@@ -1530,9 +1588,9 @@ def optimize_lista(
         return {
             "lista_id": lista_id,
             "items_count": len(items),
-            "proveedores": proveedores_ordenados,
+            "comercios": comercios_ordenados,
             "mejor_opcion": {
-                "proveedor": mejor_opcion['proveedor'],
+                "comercio": mejor_opcion['comercio'],
                 "total": mejor_opcion['total'],
                 "ahorro_vs_peor": ahorro_vs_peor,
                 "completo": mejor_opcion['completo'],
@@ -1540,13 +1598,13 @@ def optimize_lista(
                 "distancia_km": mejor_opcion.get('distancia_km'),
                 "direccion": mejor_opcion.get('direccion', '')
             } if mejor_opcion else None,
-            "proveedor_faltantes": proveedor_faltantes,
+            "comercio_faltantes": comercio_faltantes,
             "alternativa_completa": alternativa_completa,
             "division_sugerida": {
                 "total": round(division_total, 2),
-                "proveedores": division_formateada,
+                "comercios": division_formateada,
                 "ahorro_vs_unico": ahorro_division,
-                "cantidad_proveedores": len(division_formateada)
+                "cantidad_comercios": len(division_formateada)
             } if len(division_formateada) > 1 else None
         }
 
@@ -1608,7 +1666,7 @@ def mis_alertas(
     
     try:
         res = db.supabase.table("alertas_precio")\
-            .select("*, producto(nombre_prod, precio_prod, imagen_prod, provee_prod)")\
+            .select("*, producto(nombre_prod, precio_prod, imagen_prod, comercio_prod)")\
             .eq("user_id", db.current_user["id"])\
             .eq("activa", True)\
             .order("fecha_creacion", desc=True)\
@@ -1999,100 +2057,6 @@ def delete_item(
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return {"message": msg}
-
-# ─────────────────────────────────────────────────────────────
-# ENDPOINTS DE FAVORITOS 
-# ─────────────────────────────────────────────────────────────
-
-class FavoritoCreate(BaseModel):
-    id_prod: str
-
-@app.get("/api/v1/favoritos", tags=["Favoritos"])
-def get_favoritos(
-    authorization: Optional[str] = Header(None),
-    db: DatabaseManager = Depends(get_db)
-):
-    """Obtiene los favoritos del usuario autenticado con datos del producto."""
-    set_user_from_token(db, authorization)
-    if not db.current_user:
-        raise HTTPException(status_code=401, detail="No autenticado")
-
-    try:
-        res = db.supabase.table("favoritos") \
-            .select("id_prod, fecha_agregado, producto(id_prod, nombre_prod, precio_prod, marca_prod, cate_prod, imagen_prod, provee_prod, unidad_prod, cantidad_prod)") \
-            .eq("user_id", db.current_user["id"]) \
-            .order("fecha_agregado", desc=True) \
-            .execute()
-
-        # Aplanar: devolver datos del producto directamente
-        results = []
-        for row in (res.data or []):
-            prod = row.get("producto") or {}
-            if prod:
-                prod["fecha_favorito"] = row.get("fecha_agregado")
-                results.append(prod)
-
-        return {"count": len(results), "results": results}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/favoritos", tags=["Favoritos"])
-def add_favorito(
-    fav: FavoritoCreate,
-    authorization: Optional[str] = Header(None),
-    db: DatabaseManager = Depends(get_db)
-):
-    """Agrega un producto a favoritos (ignora duplicados)."""
-    set_user_from_token(db, authorization)
-    if not db.current_user:
-        raise HTTPException(status_code=401, detail="No autenticado")
-
-    try:
-        # Verificar si ya existe
-        existing = db.supabase.table("favoritos") \
-            .select("id") \
-            .eq("user_id", db.current_user["id"]) \
-            .eq("id_prod", fav.id_prod) \
-            .execute()
-
-        if existing.data:
-            return {"message": "Ya en favoritos", "created": False}
-
-        res = db.supabase.table("favoritos").insert({
-            "user_id": db.current_user["id"],
-            "id_prod": fav.id_prod,
-        }).execute()
-
-        return {"message": "Agregado a favoritos", "created": True, "data": res.data[0] if res.data else {}}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.delete("/api/v1/favoritos/{id_prod}", tags=["Favoritos"])
-def remove_favorito(
-    id_prod: str,
-    authorization: Optional[str] = Header(None),
-    db: DatabaseManager = Depends(get_db)
-):
-    """Elimina un producto de favoritos."""
-    set_user_from_token(db, authorization)
-    if not db.current_user:
-        raise HTTPException(status_code=401, detail="No autenticado")
-
-    try:
-        db.supabase.table("favoritos") \
-            .delete() \
-            .eq("user_id", db.current_user["id"]) \
-            .eq("id_prod", id_prod) \
-            .execute()
-
-        return {"message": "Eliminado de favoritos"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------

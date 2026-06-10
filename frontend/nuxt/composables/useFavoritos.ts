@@ -1,71 +1,55 @@
-// composables/useFavoritos.ts
-// Favoritos sincronizados con Supabase.
-// Si el usuario NO está logueado, usa localStorage como fallback.
-
 const FAVORITOS_KEY = 'comparapp_favoritos'
+
+// Estado global (singleton) para que todos los componentes compartan el mismo array
 let _favoritos = null
 
 export const useFavoritos = () => {
+  // Si ya existe el estado global, usarlo. Si no, crearlo.
   if (!_favoritos) {
     _favoritos = ref([])
-    // Cargar desde localStorage siempre al inicio (offline/fallback)
+    
+    // Cargar desde localStorage solo la primera vez
     try {
       const stored = localStorage.getItem(FAVORITOS_KEY)
-      if (stored) _favoritos.value = JSON.parse(stored)
-    } catch {}
-  }
-
-  const favoritos = _favoritos
-  const { $fetch } = useNuxtApp()
-  const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase || 'http://localhost:8000/api/v1'
-
-  const getToken = () => {
-    try {
-      const stored = localStorage.getItem('comparapp_user')
-      return stored ? JSON.parse(stored).access_token || '' : ''
-    } catch { return '' }
-  }
-
-  const isLoggedIn = () => !!getToken()
-
-  // ── Persistencia local (siempre como caché) ──────────────────────
-  const saveLocal = () => {
-    try { localStorage.setItem(FAVORITOS_KEY, JSON.stringify(favoritos.value)) } catch {}
-  }
-
-  // ── Cargar desde Supabase (si hay sesión) ─────────────────────────
-  const cargarDesdeBackend = async () => {
-    if (!isLoggedIn()) return
-    try {
-      const res = await fetch(`${apiBase}/favoritos`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      })
-      if (!res.ok) return
-      const data = await res.json()
-      favoritos.value = data.results || []
-      saveLocal()
+      if (stored) {
+        _favoritos.value = JSON.parse(stored)
+        console.log('📦 Favoritos cargados:', _favoritos.value.length)
+      }
     } catch (e) {
-      console.warn('useFavoritos: error cargando desde backend', e)
+      console.error('Error cargando favoritos:', e)
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────
+  const favoritos = _favoritos
+
+  const guardarFavoritos = () => {
+    try {
+      localStorage.setItem(FAVORITOS_KEY, JSON.stringify(favoritos.value))
+      console.log('💾 Guardados:', favoritos.value.length, 'favoritos')
+    } catch (e) {
+      console.error('Error guardando favoritos:', e)
+    }
+  }
+
   const esFavorito = (id_prod) => {
     if (!id_prod) return false
     return favoritos.value.some(f => f.id_prod === id_prod)
   }
 
-  // ── Toggle ────────────────────────────────────────────────────────
-  const toggleFavorito = async (producto) => {
-    if (!producto?.id_prod) return
+  const toggleFavorito = (producto) => {
+    if (!producto || !producto.id_prod) {
+      console.error('❌ toggleFavorito: producto sin id_prod', producto)
+      alert('Error: Este producto no tiene ID válido')
+      return
+    }
 
-    const yaEsta = esFavorito(producto.id_prod)
-
-    // 1. Actualizar estado local inmediatamente (optimistic UI)
-    if (yaEsta) {
-      favoritos.value = favoritos.value.filter(f => f.id_prod !== producto.id_prod)
+    const index = favoritos.value.findIndex(f => f.id_prod === producto.id_prod)
+    
+    if (index >= 0) {
+      console.log('❤️ Quitando favorito:', producto.id_prod, producto.nombre_prod)
+      favoritos.value.splice(index, 1)
     } else {
+      console.log('❤️ Agregando favorito:', producto.id_prod, producto.nombre_prod)
       favoritos.value.push({
         id_prod: producto.id_prod,
         nombre_prod: producto.nombre_prod,
@@ -73,54 +57,28 @@ export const useFavoritos = () => {
         precio_prod: producto.precio_prod,
         cate_prod: producto.cate_prod,
         imagen_prod: producto.imagen_prod,
-        provee_prod: producto.provee_prod,
+        comercio_prod: producto.comercio_prod,
+        fecha_agregado: new Date().toISOString()
       })
     }
-    saveLocal()
-
-    // 2. Sincronizar con backend si está logueado
-    if (!isLoggedIn()) return
-
-    try {
-      if (yaEsta) {
-        await fetch(`${apiBase}/favoritos/${producto.id_prod}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${getToken()}` }
-        })
-      } else {
-        await fetch(`${apiBase}/favoritos`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ id_prod: producto.id_prod })
-        })
-      }
-    } catch (e) {
-      console.warn('useFavoritos: error sincronizando con backend', e)
-      // No revertir — el local ya quedó guardado
-    }
+    
+    guardarFavoritos()
+    console.log('📦 Total favoritos ahora:', favoritos.value.length)
   }
 
   const eliminarFavorito = (id_prod) => {
-    const producto = favoritos.value.find(f => f.id_prod === id_prod)
-    if (producto) toggleFavorito(producto)
+    if (!id_prod) {
+      console.error('❌ eliminarFavorito: id_prod vacío')
+      return
+    }
+    favoritos.value = favoritos.value.filter(f => f.id_prod !== id_prod)
+    guardarFavoritos()
   }
 
-  // Orden por nombre
-  const favoritosOrdenados = computed(() =>
-    [...favoritos.value].sort((a, b) =>
-      (a.nombre_prod || '').localeCompare(b.nombre_prod || '', 'es')
-    )
-  )
-
   return {
-    favoritos,
-    favoritosOrdenados,
+    favoritos: readonly(favoritos),
     esFavorito,
     toggleFavorito,
-    eliminarFavorito,
-    cargarDesdeBackend,
+    eliminarFavorito
   }
 }

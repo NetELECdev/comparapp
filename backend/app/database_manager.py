@@ -45,16 +45,16 @@ class DatabaseManager:
             print(f"Error parseando WKB: {e}")
             return {'lat': None, 'lng': None}
 
-    def _enrich_proveedores(self, proveedores: list) -> list:
-        for p in proveedores:
-            if p.get('ubicacion_provee'):
-                coords = self._parse_wkb_point(p['ubicacion_provee'])
+    def _enrich_comercios(self, comercios: list) -> list:
+        for p in comercios:
+            if p.get('ubicacion_comer'):
+                coords = self._parse_wkb_point(p['ubicacion_comer'])
                 p['lat'] = coords['lat']
                 p['lng'] = coords['lng']
             else:
                 p['lat'] = None
                 p['lng'] = None
-        return proveedores
+        return comercios
 
     def _test_connection_simple(self):
         """Test de conexión básico"""
@@ -165,8 +165,8 @@ class DatabaseManager:
                 "fecha_registro_user": datetime.now().isoformat(),
                 "ultima_conexion_user": datetime.now().isoformat(),
                 "rol_user": "usuario",
-                "es_proveedor_user": False,
-                "proveedor_verificado_user": False,
+                "es_comercio_user": False,
+                "comercio_verificado_user": False,
                 "preferencias_user": json.dumps({
                     "security_version": "1.0",
                     "password_changed_at": datetime.now().isoformat()
@@ -361,7 +361,7 @@ class DatabaseManager:
     def create_product(self, product_data: dict) -> Tuple[bool, str]:
         """
         Crea un producto nuevo o actualiza el precio si ya existe
-        uno con nombre similar + mismo proveedor.
+        uno con nombre similar + mismo comercio.
         """
         if not self.is_admin():
             return False, "Permisos insuficientes"
@@ -370,11 +370,11 @@ class DatabaseManager:
             from datetime import datetime
             
             nombre = product_data.get('nombre_prod', '').strip()
-            proveedor = product_data.get('provee_prod', '').strip()
+            comercio = product_data.get('comercio_prod', '').strip()
             nuevo_precio = product_data.get('precio_prod')
             
-            if not nombre or not proveedor:
-                return False, "nombre_prod y provee_prod son requeridos"
+            if not nombre or not comercio:
+                return False, "nombre_prod y comercio_prod son requeridos"
             
             # Normalizar nombre para búsqueda de duplicados
             nombre_normalizado = self._normalize_product_name(nombre)
@@ -382,10 +382,10 @@ class DatabaseManager:
             if not nombre_normalizado:
                 return False, "nombre_prod no válido después de normalizar"
             
-            # Buscar TODOS los productos activos del mismo proveedor
+            # Buscar TODOS los productos activos del mismo comercio
             response = self.supabase.table('producto')\
-                .select('id_prod, nombre_prod, precio_prod, provee_prod, fecha_prod, describe_prod, unidad_prod, cantidad_prod, marca_prod, imagen_prod, cate_id, cate_prod')\
-                .eq('provee_prod', proveedor)\
+                .select('id_prod, nombre_prod, precio_prod, comercio_prod, fecha_prod, describe_prod, unidad_prod, cantidad_prod, marca_prod, imagen_prod, cate_id, cate_prod')\
+                .eq('comercio_prod', comercio)\
                 .eq('activo_prod', True)\
                 .execute()
             
@@ -902,40 +902,40 @@ class DatabaseManager:
 
 
     # ===== MÉTODOS PARA PROVEEDORES =====
-    def insert_proveedor(self, proveedor_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
-        """Inserta un nuevo proveedor en Supabase"""
+    def insert_comercio(self, comercio_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
+        """Inserta un nuevo comercio en Supabase"""
         try:
-            response = self.supabase.table('proveedor').insert(proveedor_data).execute()
+            response = self.supabase.table('comercio').insert(comercio_data).execute()
             if response.data:
                 return response.data[0], None
             return None, "No se recibieron datos del servidor"
         except Exception as e:
             return None, str(e)
 
-    def update_proveedor(self, proveedor_id: str, update_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
-        """Actualiza un proveedor existente"""
+    def update_comerdor(self, comercio_id: str, update_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
+        """Actualiza un comercio existente"""
         try:
-            response = self.supabase.table('proveedor').update(update_data).eq('id_provee', proveedor_id).execute()
+            response = self.supabase.table('comercio').update(update_data).eq('id_comer', comercio_id).execute()
             if response.data:
                 return response.data[0], None
-            return None, "Proveedor no encontrado"
+            return None, "Comercio no encontrado"
         except Exception as e:
             return None, str(e)
 
 
-    def search_proveedores(self, search_text: str, sort_by: str = 'nombre') -> Tuple[List[Dict], Optional[str]]:
-        """Busca proveedores - Compatible con Supabase 1.0.3 y con enriquecimiento de coordenadas"""
+    def search_comercios(self, search_text: str, sort_by: str = 'nombre') -> Tuple[List[Dict], Optional[str]]:
+        """Busca comercios - Compatible con Supabase 1.0.3 y con enriquecimiento de coordenadas"""
         try:
             # Caso 1: Sin texto de búsqueda (obtener todos los activos)
             if not search_text.strip():
-                query = self.supabase.table('proveedor').select('*').eq('activo_provee', True)
+                query = self.supabase.table('comercio').select('*').eq('activo_comer', True)
                 response = query.execute()
-                return self._enrich_proveedores(response.data), None  # ← fix: era all_results
+                return self._enrich_comercios(response.data), None  # ← fix: era all_results
 
             # Caso 2: Con texto de búsqueda (Simulación de OR con múltiples consultas)
             queries = [
-                self.supabase.table('proveedor').select('*').eq('activo_provee', True).ilike('nombre_provee', f'%{search_text}%'),
-                self.supabase.table('proveedor').select('*').eq('activo_provee', True).ilike('representa_provee', f'%{search_text}%')
+                self.supabase.table('comercio').select('*').eq('activo_comer', True).ilike('nombre_comer', f'%{search_text}%'),
+                self.supabase.table('comercio').select('*').eq('activo_comer', True).ilike('representa_comer', f'%{search_text}%')
             ]
 
             all_results = []
@@ -944,47 +944,47 @@ class DatabaseManager:
             for query in queries:
                 response = query.execute()
                 for item in response.data:
-                    item_id = item.get('id_provee')
+                    item_id = item.get('id_comer')
                     if item_id not in seen_ids:
                         all_results.append(item)
                         seen_ids.add(item_id)
 
             if sort_by == 'nombre':
-                all_results.sort(key=lambda x: x.get('nombre_provee', '').lower())
+                all_results.sort(key=lambda x: x.get('nombre_comer', '').lower())
             elif sort_by == 'categoria':
-                all_results.sort(key=lambda x: x.get('cate_provee', '').lower())
+                all_results.sort(key=lambda x: x.get('cate_comer', '').lower())
 
-            return self._enrich_proveedores(all_results), None
+            return self._enrich_comercios(all_results), None
 
         except Exception as e:
-            print(f"Error en search_proveedores: {e}")
+            print(f"Error en search_comercios: {e}")
             return [], str(e)
 
-    def get_proveedor_by_id(self, proveedor_id: str) -> Tuple[Optional[Dict], Optional[str]]:
-        """Obtiene un proveedor por su ID"""
+    def get_comercio_by_id(self, comercio_id: str) -> Tuple[Optional[Dict], Optional[str]]:
+        """Obtiene un comercio por su ID"""
         try:
-            response = self.supabase.table('proveedor').select('*').eq('id_provee', proveedor_id).execute()
+            response = self.supabase.table('comercio').select('*').eq('id_comer', comercio_id).execute()
             if response.data:
                 return response.data[0], None
-            return None, "Proveedor no encontrado"
+            return None, "Comercio no encontrado"
         except Exception as e:
             return None, str(e)
 
-    def check_proveedor_exists(self, field: str, value: str) -> Tuple[bool, Optional[str]]:
-        """Verifica si un proveedor existe por campo único (email, nombre, etc.)"""
+    def check_comercio_exists(self, field: str, value: str) -> Tuple[bool, Optional[str]]:
+        """Verifica si un comercio existe por campo único (email, nombre, etc.)"""
         try:
-            response = self.supabase.table('proveedor').select(field).eq(field, value).execute()
+            response = self.supabase.table('comercio').select(field).eq(field, value).execute()
             return len(response.data) > 0, None
         except Exception as e:
             return False, str(e)
 
-    def delete_proveedor(self, proveedor_id: str):
+    def delete_comerdor(self, comercio_id: str):
         try:
-            response = self.supabase.table('proveedor')\
-                .update({'activo_provee': False})\
-                .eq('id_provee', proveedor_id)\
+            response = self.supabase.table('comercio')\
+                .update({'activo_comer': False})\
+                .eq('id_comer', comercio_id)\
                 .execute()
-            return True, "Proveedor eliminado correctamente"
+            return True, "Comercio eliminado correctamente"
         except Exception as e:
             return False, str(e)
 
@@ -1143,7 +1143,7 @@ class DatabaseManager:
             lista = lista_resp.data[0]
 
             items_resp = self.supabase.table('lista_item')\
-                .select('*, producto(id_prod, nombre_prod, imagen_prod, precio_prod, marca_prod, provee_prod, unidad_prod, cantidad_prod)')\
+                .select('*, producto(id_prod, nombre_prod, imagen_prod, precio_prod, marca_prod, comercio_prod, unidad_prod, cantidad_prod)')\
                 .eq('id_lista', lista_id)\
                 .execute()
             lista['items'] = items_resp.data or []

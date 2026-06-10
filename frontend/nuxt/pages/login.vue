@@ -133,9 +133,9 @@ interface LoginResponse {
     ciudad_user?: string | null
     provincia_user?: string | null
     pais_user?: string | null
-    es_proveedor_user?: boolean
-    proveedor_verificado_user?: boolean
-    proveedor_id_user?: string | null
+    es_comercio_user?: boolean
+    comercio_verificado_user?: boolean
+    comercio_id_user?: string | null
     avatar_url_user?: string | null
     preferencias_user?: string
     activo_user?: boolean
@@ -182,8 +182,8 @@ async function login() {
         pais: response.user.pais_user || null,
         rol: response.user.rol_user || 'usuario',
         activo: response.user.activo_user ?? true,
-        es_proveedor: response.user.es_proveedor_user || false,
-        proveedor_verificado: response.user.proveedor_verificado_user || false,
+        es_comercio: response.user.es_comercio_user || false,
+        comercio_verificado: response.user.comercio_verificado_user || false,
         fecha_registro: response.user.fecha_registro_user || null,
         ultima_conexion: response.user.ultima_conexion_user || null,
         access_token: response.user.access_token || ''

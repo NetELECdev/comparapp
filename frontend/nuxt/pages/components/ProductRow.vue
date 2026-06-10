@@ -7,7 +7,7 @@
     <div class="product-info" @click="$emit('compare', { ...product, cantidad: cantidad })">
       <h4 class="product-name">{{ product.nombre_prod }}</h4>
       <p class="product-brand">{{ product.marca_prod }}</p>
-      <p class="product-venue">{{ product.provee_prod }}</p>
+      <p class="product-venue">{{ product.comercio_prod }}</p>
     </div>
     <div class="product-actions">
       <div class="quantity-selector">

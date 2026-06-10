@@ -49,8 +49,8 @@
             </svg>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ proveedores.length }}</span>
-            <span class="stat-label">Proveedores</span>
+            <span class="stat-value">{{ comercios.length }}</span>
+            <span class="stat-label">Comercios</span>
           </div>
         </div>
         <div class="stat-card">
@@ -132,7 +132,7 @@
                   </span>
                   <span v-else class="price">${{ formatPrice(p.precio_prod) }}</span>
                 </div>
-                <span class="item-sub">{{ p.provee_prod }} • {{ p.cantidad_prod }} {{ p.unidad_prod }}</span>
+                <span class="item-sub">{{ p.comercio_prod }} • {{ p.cantidad_prod }} {{ p.unidad_prod }}</span>
               </div>
             </div>
 
@@ -226,55 +226,55 @@
       </div>
 
       <!-- TAB: PROVEEDORES -->
-      <div v-if="activeTab === 'proveedores'" class="tab-content animate-fade-in-up">
+      <div v-if="activeTab === 'comercios'" class="tab-content animate-fade-in-up">
         <div class="section-header">
           <div class="search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
             </svg>
-            <input v-model="searchProveedores" placeholder="Buscar proveedor..." />
+            <input v-model="searchComercios" placeholder="Buscar comercio..." />
           </div>
-          <button class="btn-primary" @click="openModal('proveedor')">
+          <button class="btn-primary" @click="openModal('comercio')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12h14"/><path d="M12 5v14"/>
             </svg>
             Nuevo
           </button>
         </div>
-        <div v-if="proveedoresFiltrados.length === 0" class="empty-state">
+        <div v-if="comerciosFiltrados.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
             </svg>
           </div>
-          <h3>No hay proveedores</h3>
-          <p>Cargá el primer proveedor</p>
+          <h3>No hay comercios</h3>
+          <p>Cargá el primer comercio</p>
         </div>
         <div v-else class="cards-grid">
-          <div v-for="prov in proveedoresFiltrados" :key="prov.id_provee" class="provider-card">
+          <div v-for="prov in comerciosFiltrados" :key="prov.id_comer" class="provider-card">
             <div class="provider-header">
-              <img :src="prov.logo_provee || '/images/avatar_default.png'" class="provider-logo" @error="$event.target.src='/images/avatar_default.png'"/>
-              <div class="provider-status" :class="prov.activo_provee ? 'active' : 'inactive'" />
+              <img :src="prov.logo_comer || '/images/avatar_default.png'" class="provider-logo" @error="$event.target.src='/images/avatar_default.png'"/>
+              <div class="provider-status" :class="prov.activo_comer ? 'active' : 'inactive'" />
             </div>
-            <h3 class="provider-name">{{ prov.nombre_provee }}</h3>
-            <p class="provider-cat">{{ prov.cate_provee }}</p>
+            <h3 class="provider-name">{{ prov.nombre_comer }}</h3>
+            <p class="provider-cat">{{ prov.cate_comer }}</p>
             <div class="provider-meta">
-              <span v-if="prov.direccion_provee">
+              <span v-if="prov.direccion_comer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
                 </svg>
-                {{ prov.direccion_provee }}
+                {{ prov.direccion_comer }}
               </span>
-              <span v-if="prov.email_provee">
+              <span v-if="prov.email_comer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                 </svg>
-                {{ prov.email_provee }}
+                {{ prov.email_comer }}
               </span>
             </div>
             <div class="provider-actions">
-              <button class="btn-sm" @click="editProveedor(prov)">Editar</button>
-              <button class="btn-sm danger" @click="confirmDelete('proveedor', prov)">Eliminar</button>
+              <button class="btn-sm" @click="editComercio(prov)">Editar</button>
+              <button class="btn-sm danger" @click="confirmDelete('comercio', prov)">Eliminar</button>
             </div>
           </div>
         </div>
@@ -455,10 +455,10 @@
                 <span class="form-hint">Unidad del envase (no de la unidad mínima)</span>
               </div>
               <div class="form-group full">
-                <label>Proveedor *</label>
-                <select v-model="formProducto.provee_prod" required>
+                <label>Comercio *</label>
+                <select v-model="formProducto.comercio_prod" required>
                   <option value="">Seleccionar...</option>
-                  <option v-for="prov in proveedores" :key="prov.id_provee" :value="prov.nombre_provee">{{ prov.nombre_provee }}</option>
+                  <option v-for="prov in comercios" :key="prov.id_comer" :value="prov.nombre_comer">{{ prov.nombre_comer }}</option>
                 </select>
               </div>
               <div class="form-group full">
@@ -490,53 +490,53 @@
     <!-- MODAL PROVEEDOR -->
     <Teleport to="body">
       <Transition name="modal">
-        <div v-if="modalProveedorOpen" class="modal-overlay" @click.self="closeModalProveedor">
+        <div v-if="modalComercioOpen" class="modal-overlay" @click.self="closeModalComercio">
           <div class="modal-container">
             <div class="modal-header">
-              <h3>{{ editingProveedorId ? 'Editar Proveedor' : 'Nuevo Proveedor' }}</h3>
-              <button class="modal-close" @click="closeModalProveedor">
+              <h3>{{ editingComercioId ? 'Editar Comercio' : 'Nuevo Comercio' }}</h3>
+              <button class="modal-close" @click="closeModalComercio">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>
-            <form class="modal-body form-grid" @submit.prevent="saveProveedor">
+            <form class="modal-body form-grid" @submit.prevent="saveComercio">
               <div class="form-group full">
                 <label>Nombre *</label>
-                <input v-model="formProveedor.nombre_provee" required placeholder="Ej: Autoservicio Real" />
+                <input v-model="formComercio.nombre_comer" required placeholder="Ej: Autoservicio Real" />
               </div>
               <div class="form-group">
                 <label>Categoría</label>
-                <input v-model="formProveedor.cate_provee" placeholder="Ej: Comercio" />
+                <input v-model="formComercio.cate_comer" placeholder="Ej: Comercio" />
               </div>
               <div class="form-group">
                 <label>Teléfono</label>
-                <input v-model="formProveedor.te_provee" placeholder="+54..." />
+                <input v-model="formComercio.te_comer" placeholder="+54..." />
               </div>
               <div class="form-group full">
                 <label>Email</label>
-                <input v-model="formProveedor.email_provee" type="email" placeholder="email@..." />
+                <input v-model="formComercio.email_comer" type="email" placeholder="email@..." />
               </div>
               <div class="form-group full">
                 <label>Dirección</label>
-                <input v-model="formProveedor.direccion_provee" placeholder="Rio Negro 528..." />
+                <input v-model="formComercio.direccion_comer" placeholder="Rio Negro 528..." />
               </div>
               <div class="form-group full">
                 <label>Representante</label>
-                <input v-model="formProveedor.representa_provee" placeholder="Nombre contacto" />
+                <input v-model="formComercio.representa_comer" placeholder="Nombre contacto" />
               </div>
               <div class="form-group full">
                 <label>Logo URL</label>
-                <input v-model="formProveedor.logo_provee" placeholder="https://..." />
+                <input v-model="formComercio.logo_comer" placeholder="https://..." />
               </div>
               <div class="form-group">
                 <label class="checkbox-label">
-                  <input v-model="formProveedor.activo_provee" type="checkbox" />
+                  <input v-model="formComercio.activo_comer" type="checkbox" />
                   <span>Activo</span>
                 </label>
               </div>
               <div class="form-actions full">
-                <button type="button" class="btn-secondary" @click="closeModalProveedor">Cancelar</button>
+                <button type="button" class="btn-secondary" @click="closeModalComercio">Cancelar</button>
                 <button type="submit" class="btn-primary" :disabled="saving">
-                  {{ saving ? 'Guardando...' : (editingProveedorId ? 'Actualizar' : 'Crear') }}
+                  {{ saving ? 'Guardando...' : (editingComercioId ? 'Actualizar' : 'Crear') }}
                 </button>
               </div>
             </form>
@@ -592,24 +592,24 @@ interface Producto {
   unidad_prod: string
   cantidad_prod: number
   activo_prod: boolean
-  provee_prod: string
+  comercio_prod: string
   fecha_prod: string
   marca_prod: string
   imagen_prod: string | null
   precio_prod: string
 }
 
-interface Proveedor {
-  id_provee: string
-  nombre_provee: string
-  direccion_provee: string | null
-  te_provee: string | null
-  email_provee: string | null
-  representa_provee: string | null
-  fechaIngreso_provee: string
-  activo_provee: boolean
-  cate_provee: string
-  logo_provee: string | null
+interface Comercio {
+  id_comer: string
+  nombre_comer: string
+  direccion_comer: string | null
+  te_comer: string | null
+  email_comer: string | null
+  representa_comer: string | null
+  fechaIngreso_comer: string
+  activo_comer: boolean
+  cate_comer: string
+  logo_comer: string | null
 }
 
 interface Oferta {
@@ -635,7 +635,7 @@ const saving = ref(false)
 const deleting = ref(false)
 
 const productos = ref<Producto[]>([])
-const proveedores = ref<Proveedor[]>([])
+const comercios = ref<Comercio[]>([])
 const medidas = ref<{id: number, nombre: string}[]>([])
 const categoriasBD = ref<{id: number, nombre: string}[]>([])
 const ofertas = ref<Oferta[]>([])
@@ -643,11 +643,11 @@ const loadingOfertas = ref(false)
 
 const activeTab = ref('productos')
 const searchProductos = ref('')
-const searchProveedores = ref('')
+const searchComercios = ref('')
 
 const tabs = [
   { id: 'productos',   label: 'Productos',   icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>' },
-  { id: 'proveedores', label: 'Proveedores', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>' },
+  { id: 'comercios', label: 'Comercios', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>' },
   { id: 'categorias',  label: 'Categorías',  icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>' },
   { id: 'ofertas',     label: 'Ofertas',     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' },
   { id: 'usuarios',    label: 'Usuarios',    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
@@ -665,12 +665,12 @@ const productosFiltrados = computed(() => {
   )
 })
 
-const proveedoresFiltrados = computed(() => {
-  if (!searchProveedores.value) return proveedores.value
-  const q = searchProveedores.value.toLowerCase()
-  return proveedores.value.filter(p =>
-    p.nombre_provee.toLowerCase().includes(q) ||
-    (p.direccion_provee && p.direccion_provee.toLowerCase().includes(q))
+const comerciosFiltrados = computed(() => {
+  if (!searchComercios.value) return comercios.value
+  const q = searchComercios.value.toLowerCase()
+  return comercios.value.filter(p =>
+    p.nombre_comer.toLowerCase().includes(q) ||
+    (p.direccion_comer && p.direccion_comer.toLowerCase().includes(q))
   )
 })
 
@@ -853,7 +853,7 @@ const editingProductoId = ref<string | null>(null)
 const nuevaCategoria = ref('')
 const formProducto = ref<Partial<Producto>>({
   nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
-  cantidad_prod: 1, unidad_prod: 'Unidad', provee_prod: '',
+  cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
   describe_prod: '', imagen_prod: '', activo_prod: true
 })
 
@@ -862,12 +862,12 @@ function openModal(type: string) {
     editingProductoId.value = null
     formProducto.value = {
       nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
-      cantidad_prod: 1, unidad_prod: 'Unidad', provee_prod: '',
+      cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
       describe_prod: '', imagen_prod: '', activo_prod: true
     }
     modalProductoOpen.value = true
-  } else if (type === 'proveedor') {
-    openModalProveedor()
+  } else if (type === 'comercio') {
+    openModalComercio()
   }
 }
 
@@ -893,12 +893,12 @@ async function saveProducto() {
       precio_prod: String(formProducto.value.precio_prod || 0),
       cantidad_prod: Number(formProducto.value.cantidad_prod) || 1,
       unidad_prod: formProducto.value.unidad_prod || 'Unidad',
-      provee_prod: formProducto.value.provee_prod?.trim(),
+      comercio_prod: formProducto.value.comercio_prod?.trim(),
       describe_prod: formProducto.value.describe_prod?.trim() || null,
       imagen_prod: formProducto.value.imagen_prod?.trim() || null,
       activo_prod: !!formProducto.value.activo_prod,
     }
-    if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.provee_prod) {
+    if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.comercio_prod) {
       showToast('Completá todos los campos requeridos (*)', 'error')
       saving.value = false
       return
@@ -924,57 +924,57 @@ async function saveProducto() {
 
 // ─── MODAL PROVEEDOR ──────────────────────────────────────────
 
-const modalProveedorOpen = ref(false)
-const editingProveedorId = ref<string | null>(null)
-const formProveedor = ref<Partial<Proveedor>>({
-  nombre_provee: '', direccion_provee: '', te_provee: '',
-  email_provee: '', representa_provee: '', cate_provee: '', logo_provee: '', activo_provee: true
+const modalComercioOpen = ref(false)
+const editingComercioId = ref<string | null>(null)
+const formComercio = ref<Partial<Comercio>>({
+  nombre_comer: '', direccion_comer: '', te_comer: '',
+  email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true
 })
 
-function openModalProveedor() {
-  editingProveedorId.value = null
-  formProveedor.value = {
-    nombre_provee: '', direccion_provee: '', te_provee: '',
-    email_provee: '', representa_provee: '', cate_provee: '', logo_provee: '', activo_provee: true
+function openModalComercio() {
+  editingComercioId.value = null
+  formComercio.value = {
+    nombre_comer: '', direccion_comer: '', te_comer: '',
+    email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true
   }
-  modalProveedorOpen.value = true
+  modalComercioOpen.value = true
 }
 
-function closeModalProveedor() { modalProveedorOpen.value = false; editingProveedorId.value = null }
+function closeModalComercio() { modalComercioOpen.value = false; editingComercioId.value = null }
 
-function editProveedor(p: Proveedor) {
-  editingProveedorId.value = p.id_provee
-  formProveedor.value = { ...p }
-  modalProveedorOpen.value = true
+function editComercio(p: Comercio) {
+  editingComercioId.value = p.id_comer
+  formComercio.value = { ...p }
+  modalComercioOpen.value = true
 }
 
-async function saveProveedor() {
+async function saveComercio() {
   saving.value = true
   try {
     const payload: Record<string, any> = {
-      nombre_provee: formProveedor.value.nombre_provee?.trim(),
-      cate_provee: formProveedor.value.cate_provee?.trim() || null,
-      direccion_provee: formProveedor.value.direccion_provee?.trim() || null,
-      te_provee: formProveedor.value.te_provee?.trim() || null,
-      email_provee: formProveedor.value.email_provee?.trim() || null,
-      representa_provee: formProveedor.value.representa_provee?.trim() || null,
-      logo_provee: formProveedor.value.logo_provee?.trim() || null,
-      activo_provee: !!formProveedor.value.activo_provee,
-      fechaIngreso_provee: new Date().toISOString().split('T')[0]
+      nombre_comer: formComercio.value.nombre_comer?.trim(),
+      cate_comer: formComercio.value.cate_comer?.trim() || null,
+      direccion_comer: formComercio.value.direccion_comer?.trim() || null,
+      te_comer: formComercio.value.te_comer?.trim() || null,
+      email_comer: formComercio.value.email_comer?.trim() || null,
+      representa_comer: formComercio.value.representa_comer?.trim() || null,
+      logo_comer: formComercio.value.logo_comer?.trim() || null,
+      activo_comer: !!formComercio.value.activo_comer,
+      fechaIngreso_comer: new Date().toISOString().split('T')[0]
     }
-    if (!payload.nombre_provee) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
-    if (editingProveedorId.value) {
-      const res = await $fetch<{ data: Proveedor }>(`${config.public.apiBase}/proveedores/${editingProveedorId.value}`, { method: 'PUT', body: payload })
-      const idx = proveedores.value.findIndex(p => p.id_provee === editingProveedorId.value)
-      if (idx >= 0) proveedores.value[idx] = { ...proveedores.value[idx], ...res.data } as Proveedor
-      showToast('Proveedor actualizado')
+    if (!payload.nombre_comer) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
+    if (editingComercioId.value) {
+      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios/${editingComercioId.value}`, { method: 'PUT', body: payload })
+      const idx = comercios.value.findIndex(p => p.id_comer === editingComercioId.value)
+      if (idx >= 0) comercios.value[idx] = { ...comercios.value[idx], ...res.data } as Comercio
+      showToast('Comercio actualizado')
     } else {
-      const res = await $fetch<{ data: Proveedor }>(`${config.public.apiBase}/proveedores`, { method: 'POST', body: payload })
-      if (res.data) proveedores.value.unshift(res.data)
+      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios`, { method: 'POST', body: payload })
+      if (res.data) comercios.value.unshift(res.data)
       else await loadData()
-      showToast('Proveedor creado')
+      showToast('Comercio creado')
     }
-    closeModalProveedor()
+    closeModalComercio()
   } catch (err: any) {
     showToast(err?.data?.detail || 'Error al guardar', 'error')
   } finally {
@@ -992,7 +992,7 @@ const deleteItemName = ref('')
 function confirmDelete(type: string, item: any) {
   deleteType.value = type
   deleteItem.value = item
-  deleteItemName.value = item.nombre_prod || item.nombre_provee || 'elemento'
+  deleteItemName.value = item.nombre_prod || item.nombre_comer || 'elemento'
   deleteModalOpen.value = true
 }
 
@@ -1004,13 +1004,13 @@ async function executeDelete() {
       await $fetch(`${config.public.apiBase}/products/${item.id_prod}`, { method: 'DELETE' })
       productos.value = productos.value.filter(p => p.id_prod !== item.id_prod)
       showToast('Producto eliminado')
-    } else if (deleteType.value === 'proveedor') {
+    } else if (deleteType.value === 'comercio') {
       try {
-        await $fetch(`${config.public.apiBase}/proveedores/${item.id_provee}`, { method: 'PUT', body: { activo_provee: false } })
-        const idx = proveedores.value.findIndex(p => p.id_provee === item.id_provee)
-        if (idx >= 0) proveedores.value[idx].activo_provee = false
-        showToast('Proveedor desactivado')
-      } catch { showToast('No se pudo eliminar el proveedor', 'error') }
+        await $fetch(`${config.public.apiBase}/comercios/${item.id_comer}`, { method: 'PUT', body: { activo_comer: false } })
+        const idx = comercios.value.findIndex(p => p.id_comer === item.id_comer)
+        if (idx >= 0) comercios.value[idx].activo_comer = false
+        showToast('Comercio desactivado')
+      } catch { showToast('No se pudo eliminar el comercio', 'error') }
     }
   } catch (err: any) {
     showToast(err?.message || 'Error al eliminar', 'error')
@@ -1039,12 +1039,12 @@ async function loadData() {
   try {
     const [prodRes, provRes, medidasRes, catsRes] = await Promise.all([
       $fetch<{ count: number; results: Producto[] }>(`${config.public.apiBase}/products`).catch(() => ({ results: [] })),
-      $fetch<{ count: number; results: Proveedor[] }>(`${config.public.apiBase}/proveedores`).catch(() => ({ results: [] })),
+      $fetch<{ count: number; results: Comercio[] }>(`${config.public.apiBase}/comercios`).catch(() => ({ results: [] })),
       $fetch<{id: number, nombre: string}[]>(`${config.public.apiBase}/medidas`).catch(() => []),
       $fetch<{id_cate: string, nombre_cate: string}[]>(`${config.public.apiBase}/categorias`).catch(() => [])
     ])
     productos.value = prodRes.results || []
-    proveedores.value = provRes.results || []
+    comercios.value = provRes.results || []
     medidas.value = medidasRes || []
     categoriasBD.value = (catsRes || []).map((c: any) => ({ id: c.id_cate, nombre: c.nombre_cate }))
     await loadOfertas()

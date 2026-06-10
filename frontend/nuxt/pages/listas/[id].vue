@@ -96,12 +96,12 @@
                 <span v-if="item.marca" class="item-marca">· {{ item.marca }}</span>
                 <span class="item-prioridad" :class="item.prioridad">{{ item.prioridad }}</span>
               </div>
-              <!-- Proveedor + distancia del producto vinculado -->
-              <div v-if="item.producto?.provee_prod" class="item-proveedor-row">
+              <!-- Comercio + distancia del producto vinculado -->
+              <div v-if="item.producto?.comercio_prod" class="item-comercio-row">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>
-                <span class="item-proveedor-nombre">{{ item.producto.provee_prod }}</span>
-                <span v-if="distanciaProveedor(item.producto.provee_prod)" class="item-distancia">
-                  · {{ distanciaProveedor(item.producto.provee_prod) }}
+                <span class="item-comercio-nombre">{{ item.producto.comercio_prod }}</span>
+                <span v-if="distanciaComercio(item.producto.comercio_prod)" class="item-distancia">
+                  · {{ distanciaComercio(item.producto.comercio_prod) }}
                 </span>
               </div>
               <p v-if="item.notas" class="item-notas">💬 {{ item.notas }}</p>
@@ -190,7 +190,7 @@
               />
               <div class="prod-info">
                 <p class="prod-nombre">{{ prod.nombre_prod }}</p>
-                <p class="prod-meta">{{ prod.marca_prod }} · {{ prod.provee_prod }}</p>
+                <p class="prod-meta">{{ prod.marca_prod }} · {{ prod.comercio_prod }}</p>
               </div>
               <span class="prod-precio">${{ Number(prod.precio_prod).toLocaleString('es-AR') }}</span>
             </div>
@@ -290,10 +290,10 @@
             <!-- BLOQUE PRINCIPAL: dos columnas — resumen izq, productos der -->
             <div v-if="optimizacion.mejor_opcion" class="opt-bloque-principal">
 
-              <!-- Columna izquierda: resumen del mejor proveedor -->
+              <!-- Columna izquierda: resumen del mejor comercio -->
               <div class="opt-col-resumen">
                 <span class="opt-label-tag opt-tag-verde">Mejor precio</span>
-                <span class="opt-bloque-proveedor">{{ optimizacion.mejor_opcion.proveedor }}</span>
+                <span class="opt-bloque-comercio">{{ optimizacion.mejor_opcion.comercio }}</span>
                 <div v-if="optimizacion.mejor_opcion.distancia_km !== null" class="opt-distancia">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
                   {{ labelDistancia(optimizacion.mejor_opcion.distancia_km) }}
@@ -307,7 +307,7 @@
                 </div>
               </div>
 
-              <!-- Columna derecha: productos de este proveedor -->
+              <!-- Columna derecha: productos de este comercio -->
               <div class="opt-col-productos">
                 <div class="opt-col-titulo">Productos incluidos</div>
                 <div v-for="p in optimizacion.mejor_opcion.detalle_productos" :key="p.nombre" class="opt-prod-row">
@@ -319,19 +319,19 @@
             </div>
 
             <!-- FALTANTES: mismo criterio, debajo, dentro de la misma sección -->
-            <div v-if="!optimizacion.mejor_opcion?.completo && optimizacion.proveedor_faltantes" class="opt-bloque-faltantes">
+            <div v-if="!optimizacion.mejor_opcion?.completo && optimizacion.comercio_faltantes" class="opt-bloque-faltantes">
               <div class="opt-faltantes-col-resumen">
                 <span class="opt-label-tag opt-tag-naranja">Faltantes · mejor precio</span>
-                <span class="opt-bloque-proveedor" style="color: var(--accent-amber)">{{ optimizacion.proveedor_faltantes.proveedor }}</span>
-                <div v-if="optimizacion.proveedor_faltantes.distancia_km !== null" class="opt-distancia">
+                <span class="opt-bloque-comercio" style="color: var(--accent-amber)">{{ optimizacion.comercio_faltantes.comercio }}</span>
+                <div v-if="optimizacion.comercio_faltantes.distancia_km !== null" class="opt-distancia">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {{ labelDistancia(optimizacion.proveedor_faltantes.distancia_km) }}
+                  {{ labelDistancia(optimizacion.comercio_faltantes.distancia_km) }}
                 </div>
-                <span class="opt-bloque-total" style="font-size:1.1rem">${{ formatPrecio(optimizacion.proveedor_faltantes.subtotal) }}</span>
+                <span class="opt-bloque-total" style="font-size:1.1rem">${{ formatPrecio(optimizacion.comercio_faltantes.subtotal) }}</span>
               </div>
               <div class="opt-col-productos">
                 <div class="opt-col-titulo">Productos faltantes</div>
-                <div v-for="p in optimizacion.proveedor_faltantes.items" :key="p.nombre" class="opt-prod-row">
+                <div v-for="p in optimizacion.comercio_faltantes.items" :key="p.nombre" class="opt-prod-row">
                   <span class="opt-prod-nombre">{{ p.nombre }} ×{{ p.cantidad }}</span>
                   <span class="opt-prod-precio">${{ formatPrecio(p.precio_unitario) }}</span>
                 </div>
@@ -341,12 +341,12 @@
             <!-- ALTERNATIVA COMPLETA -->
             <div
               v-if="optimizacion.alternativa_completa &&
-                    optimizacion.alternativa_completa.proveedor !== optimizacion.mejor_opcion?.proveedor"
+                    optimizacion.alternativa_completa.comercio !== optimizacion.mejor_opcion?.comercio"
               class="opt-bloque-alternativa"
             >
               <span class="opt-label-tag opt-tag-gris">Alternativa · lista completa</span>
               <div class="opt-alt-fila">
-                <span class="opt-alt-proveedor">{{ optimizacion.alternativa_completa.proveedor }}</span>
+                <span class="opt-alt-comercio">{{ optimizacion.alternativa_completa.comercio }}</span>
                 <div v-if="optimizacion.alternativa_completa.distancia_km !== null" class="opt-distancia">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
                   {{ labelDistancia(optimizacion.alternativa_completa.distancia_km) }}
@@ -360,13 +360,13 @@
 
             <!-- DIVISIÓN ÓPTIMA -->
             <div v-if="optimizacion.division_sugerida && optimizacion.division_sugerida.ahorro_vs_unico > 0" class="opt-bloque-division">
-              <span class="opt-label-tag opt-tag-dorado">División óptima · {{ optimizacion.division_sugerida.cantidad_proveedores }} comercios</span>
+              <span class="opt-label-tag opt-tag-dorado">División óptima · {{ optimizacion.division_sugerida.cantidad_comercios }} comercios</span>
               <span class="opt-div-total">${{ formatPrecio(optimizacion.division_sugerida.total) }}</span>
               <span class="opt-div-ahorro">Ahorrás ${{ formatPrecio(optimizacion.division_sugerida.ahorro_vs_unico) }} extra repartiendo la compra</span>
-              <div v-for="div in optimizacion.division_sugerida.proveedores" :key="div.proveedor" class="opt-div-grupo">
+              <div v-for="div in optimizacion.division_sugerida.comercios" :key="div.comercio" class="opt-div-grupo">
                 <div class="opt-div-grupo-header">
                   <div class="opt-prov-con-distancia">
-                    <span>{{ div.proveedor }}</span>
+                    <span>{{ div.comercio }}</span>
                     <span v-if="div.distancia_km !== null" class="opt-distancia">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
                       {{ labelDistancia(div.distancia_km) }}
@@ -383,18 +383,18 @@
 
             <!-- TABLA COMPARATIVA -->
             <div class="opt-tabla">
-              <h4>Comparación por proveedor</h4>
+              <h4>Comparación por comercio</h4>
               <div class="opt-tabla-header">
-                <span>Proveedor</span><span>Total</span><span>Prod.</span>
+                <span>Comercio</span><span>Total</span><span>Prod.</span>
               </div>
               <div
-                v-for="(prov, idx) in optimizacion.proveedores"
-                :key="prov.proveedor"
+                v-for="(prov, idx) in optimizacion.comercios"
+                :key="prov.comercio"
                 class="opt-tabla-row"
                 :class="{ 'opt-ganador': idx === 0 }"
               >
                 <div class="opt-prov-con-distancia">
-                  <span class="opt-nombre">{{ prov.proveedor }}</span>
+                  <span class="opt-nombre">{{ prov.comercio }}</span>
                   <span v-if="prov.distancia_km !== null" class="opt-distancia-sm">{{ labelDistancia(prov.distancia_km) }}</span>
                 </div>
                 <span class="opt-monto">${{ formatPrecio(prov.total) }}</span>
@@ -419,7 +419,7 @@ interface Producto {
   nombre_prod: string
   marca_prod: string
   precio_prod: string
-  provee_prod: string
+  comercio_prod: string
   imagen_prod: string | null
   unidad_prod: string
   cantidad_prod: number
@@ -530,27 +530,27 @@ function formatPrecio(n: number) {
   return n > 0 ? `${n.toLocaleString('es-AR')}` : '—'
 }
 
-// ── Distancias por proveedor ──────────────────────────────
-const distanciasPorProveedor = computed<Record<string, number | null>>(() => {
+// ── Distancias por comercio ──────────────────────────────
+const distanciasPorComercio = computed<Record<string, number | null>>(() => {
   const map: Record<string, number | null> = {}
   if (!optimizacion.value) return map
   const fuentes: any[] = [
     optimizacion.value.mejor_opcion,
-    optimizacion.value.proveedor_faltantes,
+    optimizacion.value.comercio_faltantes,
     optimizacion.value.alternativa_completa,
-    ...(optimizacion.value.proveedores || []),
-    ...(optimizacion.value.division_sugerida?.proveedores || [])
+    ...(optimizacion.value.comercios || []),
+    ...(optimizacion.value.division_sugerida?.comercios || [])
   ]
   for (const f of fuentes) {
-    if (f?.proveedor && f.distancia_km !== undefined) {
-      map[f.proveedor] = f.distancia_km
+    if (f?.comercio && f.distancia_km !== undefined) {
+      map[f.comercio] = f.distancia_km
     }
   }
   return map
 })
 
-function distanciaProveedor(nombre: string): string | null {
-  const d = distanciasPorProveedor.value[nombre]
+function distanciaComercio(nombre: string): string | null {
+  const d = distanciasPorComercio.value[nombre]
   if (d === null || d === undefined) return null
   return d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`
 }
@@ -810,7 +810,7 @@ onMounted(cargar)
   letter-spacing: 0.05em;
 }
 
-.opt-proveedor {
+.opt-comercio {
   font-size: 0.9rem;
   font-weight: 600;
   color: #34d399;
@@ -1264,7 +1264,7 @@ onMounted(cargar)
 .opt-tag-gris   { background: rgba(148,163,184,0.12); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
 .opt-tag-dorado { background: rgba(232,196,160,0.12); color: var(--accent-gold); border: 1px solid rgba(232,196,160,0.25); }
 
-.opt-bloque-proveedor { font-size: 1rem; font-weight: 700; color: #34d399; }
+.opt-bloque-comercio { font-size: 1rem; font-weight: 700; color: #34d399; }
 .opt-bloque-total { font-size: 1.6rem; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
 .opt-bloque-ahorro { font-size: 0.78rem; color: #34d399; }
 
@@ -1285,7 +1285,7 @@ onMounted(cargar)
   margin-bottom: 0.2rem;
 }
 .opt-faltantes-row { display: flex; justify-content: space-between; align-items: baseline; }
-.opt-faltantes-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-faltantes-comercio { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .opt-faltantes-total { font-size: 0.95rem; font-weight: 700; color: var(--accent-gold); }
 .opt-faltantes-item {
   display: flex; justify-content: space-between;
@@ -1309,7 +1309,7 @@ onMounted(cargar)
   flex-direction: column;
   gap: 0.3rem;
 }
-.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-alt-comercio { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .opt-alt-total { font-size: 1.2rem; font-weight: 700; color: var(--text-secondary); }
 .opt-alt-diff { font-size: 0.75rem; color: var(--text-muted); }
 
@@ -1417,14 +1417,14 @@ onMounted(cargar)
   gap: 8px;
   flex-wrap: wrap;
 }
-.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.opt-alt-comercio { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .opt-alt-total { font-size: 1rem; font-weight: 700; color: var(--text-secondary); margin-left: auto; }
 
 /* Naranja para faltantes */
 .opt-tag-naranja { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
 
-/* item-proveedor-row en la lista */
-.item-proveedor-row {
+/* item-comercio-row en la lista */
+.item-comercio-row {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1432,7 +1432,7 @@ onMounted(cargar)
   color: var(--text-muted);
   margin-top: 2px;
 }
-.item-proveedor-nombre { color: var(--text-secondary); font-weight: 500; }
+.item-comercio-nombre { color: var(--text-secondary); font-weight: 500; }
 .item-distancia { color: var(--text-muted); }
 
 </style>

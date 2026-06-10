@@ -35,7 +35,7 @@
               <span class="fav-categoria">{{ item.cate_prod }}</span>
               <h3 class="fav-nombre">{{ item.nombre_prod }}</h3>
               <p class="fav-marca">{{ item.marca_prod }}</p>
-              <p class="fav-proveedor">{{ item.provee_prod }}</p>
+              <p class="fav-comercio">{{ item.comercio_prod }}</p>
               <span class="fav-precio">${{ formatPrice(item.precio_prod) }}</span>
             </div>
           </NuxtLink>
@@ -316,7 +316,7 @@ function formatPrice(price) {
   margin: 0;
 }
 
-.fav-proveedor {
+.fav-comercio {
   color: var(--text-muted);
   font-size: 0.75rem;
   margin: 0;

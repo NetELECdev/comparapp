@@ -8,7 +8,7 @@
             <div class="header-info">
               <span class="modal-categoria">{{ product.cate_prod }}</span>
               <h2 class="modal-title">{{ product.nombre_prod }}</h2>
-              <p class="modal-subtitle">{{ product.marca_prod }} · {{ product.provee_prod }}</p>
+              <p class="modal-subtitle">{{ product.marca_prod }} · {{ product.comercio_prod }}</p>
             </div>
             <div class="header-actions">
               <FavoritoButton :product="product" />
@@ -157,7 +157,7 @@
                 :class="{ 'es-actual': comp.id_prod === product.id_prod }"
               >
                 <div class="comp-info">
-                  <span class="comp-proveedor">{{ comp.provee_prod }}</span>
+                  <span class="comp-proveedor">{{ comp.comercio_prod }}</span>
                   <span v-if="comp.es_mejor_precio" class="comp-tag tag-mejor">Más barato</span>
                   <span v-else-if="comp.es_peor_precio" class="comp-tag tag-carro">Más caro</span>
                 </div>
@@ -309,27 +309,47 @@ async function cargarHistorial(dias: number) {
       precio: parseFloat(props.product.precio_prod) || 0
     }
 
+    // Agregar precios actuales de competidores como puntos adicionales en la serie
+    // para que el gráfico refleje el rango real de precios entre comercios
+    const puntosCompetidores = competidores.value
+      .filter((c: any) => c.id_prod !== props.product.id_prod)
+      .map((c: any) => ({
+        fecha: c.fecha_prod || new Date().toISOString(),
+        precio: parseFloat(c.precio_prod) || 0,
+        esCompetidor: true
+      }))
+      .filter((p: any) => p.precio > 0)
+
     if (serieHistorial.length >= 2) {
-      // Asegurar que el último punto sea el precio actual de este producto
-      chartData.value = [...serieHistorial, precioActual]
+      // Historial real + precios actuales de competidores + precio actual
+      chartData.value = [...serieHistorial, ...puntosCompetidores, precioActual]
+        .sort((a: any, b: any) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
     } else {
-      // Sin historial: mostrar evolución de precios entre competidores + precio actual
+      // Sin historial: evolución de precios entre competidores + precio actual
       chartData.value = [...serieCompetidores, precioActual]
     }
 
     priceHistory.value = chartData.value
 
     // 5. Calcular stats
-    const precios = chartData.value.map((p: any) => p.precio).filter((p: number) => p > 0)
-    const min = precios.length ? Math.min(...precios) : 0
-    const max = precios.length ? Math.max(...precios) : 0
-    const avg = precios.length ? precios.reduce((a: number, b: number) => a + b, 0) / precios.length : 0
+    // Incluir SIEMPRE los precios de todos los competidores para que min/max sea real
+    // Min/max: SOLO precios actuales entre comercios (no historial temporal)
+    // El historial puede tener precios viejos que confunden al usuario
+    const preciosCompetidores = competidores.value
+      .map((c: any) => parseFloat(c.precio_prod))
+      .filter((p: number) => p > 0)
+    const preciosChart = chartData.value.map((p: any) => p.precio).filter((p: number) => p > 0)
+    const min = preciosCompetidores.length ? Math.min(...preciosCompetidores) : 0
+    const max = preciosCompetidores.length ? Math.max(...preciosCompetidores) : 0
+    const avg = preciosCompetidores.length
+      ? preciosCompetidores.reduce((a: number, b: number) => a + b, 0) / preciosCompetidores.length
+      : 0
 
-    // Variación: primer vs último punto
+    // Variación: primer vs último punto del historial
     let variacion30d = 0
-    if (precios.length >= 2) {
-      const first = precios[0]
-      const last = precios[precios.length - 1]
+    if (preciosChart.length >= 2) {
+      const first = preciosChart[0]
+      const last = preciosChart[preciosChart.length - 1]
       if (first > 0) variacion30d = ((last - first) / first) * 100
     }
 

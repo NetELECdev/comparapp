@@ -185,16 +185,16 @@ const SUPABASE = 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/pub
 // Estructura fiel al dashV1: imagen ilustrativa + título debajo
 // Distribución masonry: columna izquierda y derecha con tamaños variables
 const menuItems = ref([
-  { title: 'Alertas',     imageUrl: `${SUPABASE}/alerta.jpg`,      action: () => navigateTo('/alertas') },
-  { title: 'Comparador',  imageUrl: `${SUPABASE}/comparador.jpg`,  action: () => navigateTo('/comparaciones') },
-  { title: 'Favoritos',   imageUrl: `${SUPABASE}/favoritos.jpg`,   action: () => navigateTo('/favoritos') },
-  { title: 'Historial',   imageUrl: `${SUPABASE}/historial.jpg`,   action: () => navigateTo('/comparaciones/historial') },
-  { title: 'Listas',      imageUrl: `${SUPABASE}/lista.jpg`,       action: () => navigateTo('/listas') },
-  { title: 'Productos',   imageUrl: `${SUPABASE}/productos.jpg`,   action: () => navigateTo('/productos') },
-  { title: 'Proveedores', imageUrl: `${SUPABASE}/proveedores.jpg`, action: () => navigateTo('/proveedores') },
-  { title: 'Ofertas',     imageUrl: `${SUPABASE}/ofertas.jpg`,     action: () => navigateTo('/ofertas') },
-  { title: 'Perfil',      imageUrl: `${SUPABASE}/admin.jpg`,       action: () => navigateTo('/perfil') },
-  { title: 'Admin',       imageUrl: `${SUPABASE}/admin.jpg`,       action: () => navigateTo('/admin') },
+  { title: 'Alertas',     imageUrl: `${SUPABASE}/alertas%20(1).jpg`,      action: () => navigateTo('/alertas') },
+  { title: 'Comparador',  imageUrl: `${SUPABASE}/comparador%20(1).jpg`,  action: () => navigateTo('/comparaciones') },
+  { title: 'Favoritos',   imageUrl: `${SUPABASE}/favoritos%20(1).jpg`,   action: () => navigateTo('/favoritos') },
+  { title: 'Historial',   imageUrl: `${SUPABASE}/historial%20(1).jpg`,   action: () => navigateTo('/comparaciones/historial') },
+  { title: 'Listas',      imageUrl: `${SUPABASE}/lista%20(1).jpg`,       action: () => navigateTo('/listas') },
+  { title: 'Productos',   imageUrl: `${SUPABASE}/productos%20(1).jpg`,   action: () => navigateTo('/productos') },
+  { title: 'Comercios',   imageUrl: `${SUPABASE}/comercios.jpg`,   action: () => navigateTo('/comercios') },
+  { title: 'Ofertas',     imageUrl: `${SUPABASE}/ofertas1.jpg`,     action: () => navigateTo('/ofertas') },
+  { title: 'Perfil',      imageUrl: `${SUPABASE}/user.jpg`,       action: () => navigateTo('/perfil') },
+  { title: 'Admin',       imageUrl: `${SUPABASE}/admin%20(1).jpg`, action: () => navigateTo('/admin') },
 ])
 
 onMounted(async () => {

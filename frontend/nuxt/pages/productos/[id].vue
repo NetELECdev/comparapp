@@ -54,12 +54,12 @@
             </span>
           </div>
 
-          <p class="detalle-proveedor">
+          <p class="detalle-comercio">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 7h-9"/><path d="M14 17H5"/>
               <circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
             </svg>
-            {{ producto.provee_prod }}
+            {{ producto.comercio_prod }}
           </p>
 
           <p v-if="producto.describe_prod" class="detalle-descripcion">
@@ -78,18 +78,18 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>
             </svg>
-            <span>Comparacion por proveedor</span>
+            <span>Comparación por comercio</span>
             <span class="same-name-count">{{ mismoNombre.results.length }} opciones</span>
           </div>
 
           <div class="same-name-stats" v-if="mismoNombre.stats">
             <span class="sns-item sns-min">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-              Min: ${{ formatPrice(mismoNombre.stats.min) }}
+              Más barato: ${{ formatPrice(mismoNombre.stats.min) }}
             </span>
             <span class="sns-item sns-max">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-              Max: ${{ formatPrice(mismoNombre.stats.max) }}
+              Más caro: ${{ formatPrice(mismoNombre.stats.max) }}
             </span>
             <span class="sns-item sns-avg" v-if="mismoNombre.stats.avg">
               Prom: ${{ formatPrice(mismoNombre.stats.avg) }}
@@ -108,8 +108,8 @@
               @click="p.id_prod !== producto.id_prod && irADetalle(p.id_prod)"
             >
               <div class="sni-info">
-                <span class="sni-proveedor">{{ p.provee_prod }}</span>
-                <span v-if="p.es_mejor_precio" class="sni-badge mejor">Mejor</span>
+                <span class="sni-comercio">{{ p.comercio_prod }}</span>
+                <span v-if="p.es_mejor_precio" class="sni-badge mejor">Más barato</span>
                 <span v-if="p.id_prod === producto.id_prod" class="sni-badge actual">Actual</span>
               </div>
               <div class="sni-precio-wrap">
@@ -189,19 +189,31 @@
               </div>
             </div>
 
-            <!-- Min / Max -->
+            <!-- Stats: Mercado actual vs Histórico de este producto -->
+            <div class="stats-grid">
+              <div class="stat-card stat-mercado-min">
+                <span class="stat-card-label">Mín. mercado</span>
+                <span class="stat-card-value">${{ formatPrice(preciosMercado.min) }}</span>
+                <span v-if="preciosMercado.count > 1" class="stat-card-meta">{{ preciosMercado.count }} comercios</span>
+              </div>
+              <div class="stat-card stat-mercado-max">
+                <span class="stat-card-label">Máx. mercado</span>
+                <span class="stat-card-value">${{ formatPrice(preciosMercado.max) }}</span>
+                <span v-if="preciosMercado.count > 1" class="stat-card-meta">{{ preciosMercado.count }} comercios</span>
+              </div>
+              <div class="stat-card stat-hist-min">
+                <span class="stat-card-label">Mín. histórico</span>
+                <span class="stat-card-value">${{ formatPrice(preciosHistorial.min) }}</span>
+                <span class="stat-card-meta">Este producto</span>
+              </div>
+              <div class="stat-card stat-hist-max">
+                <span class="stat-card-label">Máx. histórico</span>
+                <span class="stat-card-value">${{ formatPrice(preciosHistorial.max) }}</span>
+                <span class="stat-card-meta">Este producto</span>
+              </div>
+            </div>
             <div class="historial-minmax">
-              <span class="minmax-item minmax-min">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                Min: ${{ formatPrice(historial.precio_minimo) }}
-              </span>
-              <span class="minmax-sep">·</span>
-              <span class="minmax-item minmax-max">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                Max: ${{ formatPrice(historial.precio_maximo) }}
-              </span>
-              <span class="minmax-sep">·</span>
-              <span class="minmax-cambios">{{ historial.total_cambios }} cambios</span>
+              <span class="minmax-cambios">{{ historial.total_cambios }} cambios registrados</span>
             </div>
 
             <!-- Grafico SVG de evolucion -->
@@ -209,7 +221,7 @@
               <svg
                 class="grafico-svg"
                 :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                preserveAspectRatio="none"
+                preserveAspectRatio="xMidYMid meet"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <!-- Defs -->
@@ -355,7 +367,7 @@ interface Producto {
   precio_prod: string
   cate_prod: string
   imagen_prod: string | null
-  provee_prod: string
+  comercio_prod: string
   activo_prod: boolean
   describe_prod?: string
   cantidad_prod?: number
@@ -391,7 +403,7 @@ interface SameNameResponse {
     id_prod: string
     nombre_prod: string
     precio_prod: number
-    provee_prod: string
+    comercio_prod: string
     es_mejor_precio: boolean
     es_peor_precio: boolean
     pct_vs_min: number
@@ -498,6 +510,31 @@ const guiasHorizontales = computed((): Array<{y: number, label: string}> => {
     { y: toY(midP), label: `$${formatPrice(midP)}` },
     { y: toY(minP), label: `$${formatPrice(minP)}` },
   ]
+})
+
+// ─── Precios del mercado actual (todos los comercios con mismo nombre) ───
+const preciosMercado = computed(() => {
+  if (!mismoNombre.value?.results || mismoNombre.value.results.length === 0) {
+    return { min: null, max: null, count: 0 }
+  }
+  const precios = mismoNombre.value.results.map(p => Number(p.precio_prod))
+  return {
+    min: Math.min(...precios),
+    max: Math.max(...precios),
+    count: precios.length
+  }
+})
+
+// ─── Precios históricos de ESTE producto (del historial) ───
+const preciosHistorial = computed(() => {
+  if (!historial.value?.serie || historial.value.serie.length === 0) {
+    return { min: null, max: null }
+  }
+  const precios = historial.value.serie.map(s => Number(s.precio))
+  return {
+    min: Math.min(...precios),
+    max: Math.max(...precios)
+  }
 })
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -676,7 +713,7 @@ onMounted(async () => {
 .detalle-precio-wrap { display: flex; align-items: baseline; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
 .detalle-precio { color: var(--accent-emerald); font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; }
 .detalle-unidad { color: var(--text-muted); font-size: 0.8rem; }
-.detalle-proveedor { display: flex; align-items: center; gap: 0.375rem; color: var(--text-secondary); font-size: 0.85rem; margin: 0.5rem 0 0; }
+.detalle-comercio { display: flex; align-items: center; gap: 0.375rem; color: var(--text-secondary); font-size: 0.85rem; margin: 0.5rem 0 0; }
 .detalle-proveedor svg { color: var(--accent-violet); }
 .detalle-descripcion { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin: 0.75rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
 
@@ -787,6 +824,7 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
+.sni-comercio { font-size: 13px; font-weight: 600; color: var(--text-primary); min-width: 110px; flex-shrink: 0; }
 .sni-badge {
   display: inline-flex; align-items: center; gap: 0.2rem;
   padding: 0.1rem 0.4rem;
@@ -886,8 +924,8 @@ onMounted(async () => {
 .minmax-cambios { color: var(--text-muted); }
 
 /* Grafico */
-.grafico-wrap { display: flex; flex-direction: column; gap: 0.3rem; }
-.grafico-svg { width: 100%; height: 110px; border-radius: 8px; overflow: visible; }
+.grafico-wrap { display: flex; flex-direction: column; gap: 0.3rem; width: 100%; min-width: 0; }
+.grafico-svg { width: 100%; height: auto; min-height: 90px; max-height: 130px; border-radius: 8px; overflow: visible; display: block; }
 .grafico-fechas {
   display: flex; justify-content: space-between;
   font-size: 0.65rem; color: var(--text-muted); padding: 0 2px;
@@ -939,6 +977,83 @@ onMounted(async () => {
 .empty-state p  { color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
 .back-btn-text { margin-top: 0.75rem; padding: 0.625rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.25s ease; }
 .back-btn-text:hover { background: var(--bg-card-hover); border-color: var(--border-glow); color: var(--text-primary); }
+
+/* ─── STATS GRID (Mercado vs Histórico) ─── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.625rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all 0.25s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-2px);
+}
+
+.stat-mercado-min {
+  border-color: rgba(52, 211, 153, 0.2);
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.06), var(--bg-card));
+}
+.stat-mercado-min:hover { border-color: rgba(52, 211, 153, 0.4); }
+
+.stat-mercado-max {
+  border-color: rgba(251, 113, 133, 0.2);
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.06), var(--bg-card));
+}
+.stat-mercado-max:hover { border-color: rgba(251, 113, 133, 0.4); }
+
+.stat-hist-min {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.06), var(--bg-card));
+}
+.stat-hist-min:hover { border-color: rgba(96, 165, 250, 0.4); }
+
+.stat-hist-max {
+  border-color: rgba(232, 196, 160, 0.2);
+  background: linear-gradient(135deg, rgba(232, 196, 160, 0.06), var(--bg-card));
+}
+.stat-hist-max:hover { border-color: rgba(232, 196, 160, 0.4); }
+
+.stat-card-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.stat-card-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.stat-mercado-min .stat-card-value { color: #34d399; }
+.stat-mercado-max .stat-card-value { color: #fb7185; }
+.stat-hist-min .stat-card-value { color: #60a5fa; }
+.stat-hist-max .stat-card-value { color: var(--accent-gold); }
+
+.stat-card-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .stats-grid { gap: 0.5rem; }
+  .stat-card { padding: 0.75rem; }
+  .stat-card-value { font-size: 1rem; }
+}
 
 @media (max-width: 480px) {
   .page-content { padding: 1rem; }
