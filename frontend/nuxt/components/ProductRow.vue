@@ -43,7 +43,7 @@
       </div>
 
       <h3 class="row-nombre">{{ product.nombre_prod }}</h3>
-      <p class="row-marca">{{ product.marca_prod }} · {{ product.provee_prod }}</p>
+      <p class="row-marca">{{ product.marca_prod }} · {{ product.comercio_prod }}</p>
 
       <div class="row-bottom">
         <span class="row-precio">${{ formatPrice(product.precio_prod) }}</span>
@@ -56,19 +56,17 @@
 
         <!-- Indicador de competencia -->
         <span v-if="comparacion?.totalCompetidores > 1" class="competencia-indicador">
-          {{ comparacion.totalCompetidores }} proveedores
+          {{ comparacion.totalCompetidores }} comercios
         </span>
         <span v-else-if="product.total_competidores > 1" class="competencia-indicador">
-          {{ product.total_competidores }} proveedores
+          {{ product.total_competidores }} comercios
         </span>
       </div>
     </div>
 
     <div class="row-actions">
-      <button class="compare-btn" @click.stop="$emit('compare', { ...product, cantidad: 1 })" title="Comparar">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>
-        </svg>
+      <button class="compare-btn" @click.stop="$emit('compare', { ...product, cantidad: 1 })" title="Agregar a lista">
+        <img src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/carrito.jpg" alt="carrito" width="20" height="20" style="border-radius:4px;object-fit:cover;" />
       </button>
       <svg class="row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="m9 18 6-6-6-6"/>

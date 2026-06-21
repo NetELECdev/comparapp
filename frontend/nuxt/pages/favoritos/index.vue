@@ -64,7 +64,7 @@
         </div>
         <h3>No tenés favoritos</h3>
         <p>Agregá productos a favoritos tocando el corazón ❤️</p>
-        <button class="back-btn-text" @click="navigateTo('/productos/lista')">
+        <button class="back-btn-text" @click="navigateTo('/productos')">
           Explorar productos
         </button>
       </div>

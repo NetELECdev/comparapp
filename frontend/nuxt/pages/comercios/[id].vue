@@ -138,11 +138,10 @@
             <p v-else class="field-value">{{ form.representa_comer || '—' }}</p>
           </div>
 
-          <!-- URL Logo -->
-          <div class="field-group">
+          <!-- URL Logo (solo visible al editar — campo técnico, no aporta valor al usuario) -->
+          <div v-if="editando" class="field-group">
             <label class="field-label">URL del logo</label>
-            <input v-if="editando" v-model="form.logo_comer" type="url" class="field-input" />
-            <p v-else class="field-value url-value">{{ form.logo_comer || '—' }}</p>
+            <input v-model="form.logo_comer" type="url" class="field-input" />
           </div>
 
           <!-- Activo (solo edición) -->
@@ -156,12 +155,6 @@
                 <div class="toggle-thumb" />
               </div>
             </label>
-          </div>
-
-          <!-- Fecha ingreso (solo vista) -->
-          <div v-if="!editando" class="field-group">
-            <label class="field-label">Fecha de ingreso</label>
-            <p class="field-value">{{ form.fechaIngreso_comer || '—' }}</p>
           </div>
 
         </div>
@@ -297,7 +290,7 @@ async function guardar() {
     await api(`/comercios/${id}`, { method: 'PUT', body: payload })
     formOriginal = { ...form }
     editando.value = false
-    successMsg.value = '✅ Comercio actualizado correctamente'
+    successMsg.value = '✅ Proveedor actualizado correctamente'
     setTimeout(() => successMsg.value = '', 3000)
   } catch (err: any) {
     errorMsg.value = err?.data?.detail || err?.message || 'Error al guardar'

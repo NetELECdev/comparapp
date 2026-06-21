@@ -21,7 +21,7 @@
     <button
       class="bnav-btn"
       :class="{ 'bnav-btn--active': isActive('/productos') }"
-      @click="navigateTo('/productos/lista')"
+      @click="navigateTo('/productos')"
       aria-label="Productos"
       :aria-current="isActive('/productos') ? 'page' : undefined"
     >

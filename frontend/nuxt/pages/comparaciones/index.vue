@@ -33,8 +33,8 @@
           </div>
           <div class="resumen-divider" />
           <div class="resumen-item">
-            <span class="resumen-label">Proveedores</span>
-            <span class="resumen-value">{{ proveedoresUnicos }}</span>
+            <span class="resumen-label">Comercios</span>
+            <span class="resumen-value">{{ comerciosUnicos }}</span>
           </div>
         </div>
       </div>
@@ -61,24 +61,24 @@
       <!-- LISTA DE PRODUCTOS A COMPARAR -->
       <div v-if="productos.length > 0" class="comparacion-lista">
 
-        <!-- Vista agrupada por proveedor -->
-        <template v-if="sortBy === 'proveedor'">
+        <!-- Vista agrupada por comercio -->
+        <template v-if="sortBy === 'comercio'">
           <div
-            v-for="(grupo, proveedor) in productosAgrupadosPorProveedor"
-            :key="proveedor"
-            class="proveedor-grupo animate-fade-in-up"
+            v-for="(grupo, comercio) in productosAgrupadosPorComercio"
+            :key="comercio"
+            class="comercio-grupo animate-fade-in-up"
           >
-            <div class="proveedor-header">
-              <div class="proveedor-badge">
+            <div class="comercio-header">
+              <div class="comercio-badge">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                   <polyline points="9 22 9 12 15 12 15 22"/>
                 </svg>
-                {{ proveedor }}
+                {{ comercio }}
               </div>
-              <span class="proveedor-subtotal">${{ formatPrice(grupo.reduce((s, p) => s + Number(p.precio_prod) * p.cantidad, 0)) }}</span>
+              <span class="comercio-subtotal">${{ formatPrice(grupo.reduce((s, p) => s + Number(p.precio_prod) * p.cantidad, 0)) }}</span>
             </div>
-            <div class="proveedor-items">
+            <div class="comercio-items">
               <div
                 v-for="prod in grupo"
                 :key="prod.id_prod"
@@ -123,16 +123,16 @@
             <div class="item-info">
               <h4 class="item-name">{{ prod.nombre_prod }}</h4>
               <p class="item-brand">{{ prod.marca_prod }}</p>
-              <p class="item-venue">{{ prod.provee_prod }}</p>
+              <p class="item-venue">{{ prod.comercio_prod }}</p>
               <div class="item-qty">Cantidad: {{ prod.cantidad }}</div>
               <div class="item-fecha-distancia">
                 <div v-if="prod.fecha_prod" class="item-fecha">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                   {{ formatFecha(prod.fecha_prod) }}
                 </div>
-                <div v-if="distanciasPorProveedor[prod.provee_prod]" class="item-distancia">
+                <div v-if="distanciasPorComercio[prod.comercio_prod]" class="item-distancia">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {{ distanciasPorProveedor[prod.provee_prod] }}
+                  {{ distanciasPorComercio[prod.comercio_prod] }}
                 </div>
               </div>
             </div>
@@ -236,7 +236,7 @@ interface Producto {
   precio_prod: string
   cate_prod: string
   imagen_prod: string | null
-  provee_prod: string
+  comercio_prod: string
   cantidad: number
   fecha_prod?: string
   cantidad_prod?: number
@@ -254,10 +254,10 @@ const productos = ref<Producto[]>([])
 const historial = ref<HistorialItem[]>([])
 const sortBy = ref('default')
 
-// Ubicación del usuario y distancias a proveedores
+// Ubicación del usuario y distancias a comercios
 const userLat = ref<number | null>(null)
 const userLng = ref<number | null>(null)
-const distanciasPorProveedor = ref<Record<string, string>>({})
+const distanciasPorComercio = ref<Record<string, string>>({})
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371
@@ -278,15 +278,15 @@ async function cargarDistancias() {
     userLng.value = pos.coords.longitude
     try {
       const config = useRuntimeConfig()
-      const res = await $fetch<{ results: any[] }>(`${config.public.apiBase}/proveedores`)
+      const res = await $fetch<{ results: any[] }>(`${config.public.apiBase}/comercios`)
       const map: Record<string, string> = {}
       for (const prov of (res.results || [])) {
         if (prov.lat && prov.lng && userLat.value && userLng.value) {
           const km = haversine(userLat.value, userLng.value, prov.lat, prov.lng)
-          map[prov.nombre_provee] = formatDistancia(km)
+          map[prov.nombre_comer] = formatDistancia(km)
         }
       }
-      distanciasPorProveedor.value = map
+      distanciasPorComercio.value = map
     } catch {}
   }, () => {}, { timeout: 5000 })
 }
@@ -295,7 +295,7 @@ const sortOptions = [
   { label: 'Precio/Unidad', value: 'precio_unidad' },
   { label: 'Precio ↑', value: 'precio_asc' },
   { label: 'Precio ↓', value: 'precio_desc' },
-  { label: 'Proveedor', value: 'proveedor' },
+  { label: 'Comercio', value: 'comercio' },
   { label: 'Fecha', value: 'fecha' },
 ]
 
@@ -329,14 +329,14 @@ const productosOrdenados = computed(() => {
   }
 })
 
-const productosAgrupadosPorProveedor = computed(() => {
+const productosAgrupadosPorComercio = computed(() => {
   const grupos: Record<string, Producto[]> = {}
   for (const p of productos.value) {
-    const key = p.provee_prod || 'Sin proveedor'
+    const key = p.comercio_prod || 'Sin comercio'
     if (!grupos[key]) grupos[key] = []
     grupos[key].push(p)
   }
-  // Ordenar grupos por nombre de proveedor
+  // Ordenar grupos por nombre de comercio
   return Object.fromEntries(
     Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b, 'es'))
   )
@@ -348,8 +348,8 @@ const totalPrecio = computed(() => {
   return productos.value.reduce((sum, p) => sum + (Number(p.precio_prod) * p.cantidad), 0)
 })
 
-const proveedoresUnicos = computed(() => {
-  return new Set(productos.value.map(p => p.provee_prod)).size
+const comerciosUnicos = computed(() => {
+  return new Set(productos.value.map(p => p.comercio_prod)).size
 })
 
 onMounted(() => {
@@ -687,7 +687,7 @@ const recargarHistorial = (h: HistorialItem) => {
 }
 
 /* ─── GRUPOS DE PROVEEDOR ─── */
-.proveedor-grupo {
+.comercio-grupo {
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(167, 139, 250, 0.2);
@@ -695,7 +695,7 @@ const recargarHistorial = (h: HistorialItem) => {
   overflow: hidden;
 }
 
-.proveedor-header {
+.comercio-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -704,7 +704,7 @@ const recargarHistorial = (h: HistorialItem) => {
   border-bottom: 1px solid rgba(167, 139, 250, 0.12);
 }
 
-.proveedor-badge {
+.comercio-badge {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -713,29 +713,29 @@ const recargarHistorial = (h: HistorialItem) => {
   font-weight: 600;
 }
 
-.proveedor-badge svg {
+.comercio-badge svg {
   color: rgba(167, 139, 250, 0.6);
   flex-shrink: 0;
 }
 
-.proveedor-subtotal {
+.comercio-subtotal {
   color: var(--accent-green);
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.proveedor-items {
+.comercio-items {
   display: flex;
   flex-direction: column;
 }
 
-.proveedor-items .comparacion-item {
+.comercio-items .comparacion-item {
   border-radius: 0;
   border: none;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.proveedor-items .comparacion-item:last-child {
+.comercio-items .comparacion-item:last-child {
   border-bottom: none;
 }
 

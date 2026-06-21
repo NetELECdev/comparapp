@@ -255,15 +255,19 @@ def get_categorias(db: DatabaseManager = Depends(get_db)):
         if not response.data:
             return []
 
-        # Mapeo de iconos y colores por nombre de categoria
+        # Mapeo de iconos (imagen) y colores por nombre de categoria
+        SUPA_IMG = "https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images"
         icon_map = {
-            "almacen": "🥫",
-            "bebidas": "🥤",
-            "carniceria": "🥩",
-            "limpieza": "🧼",
-            "verduleria": "🥬",
-            "otros": "📦",
-            "ferreteria": "🔧",
+            "almacen": f"{SUPA_IMG}/almacen1.jpg",
+            "bebidas": f"{SUPA_IMG}/bebidas.jpg",
+            "carniceria": f"{SUPA_IMG}/carniceria.jpg",
+            "limpieza": f"{SUPA_IMG}/limpieza.jpg",
+            "verduleria": f"{SUPA_IMG}/verduleria.jpg",
+            "ferreteria": f"{SUPA_IMG}/ferreteria.jpg",
+            "lacteos": f"{SUPA_IMG}/lacteos.jpg",
+            "servicios": f"{SUPA_IMG}/servicios1.jpg",
+            "higiene personal": f"{SUPA_IMG}/higiene-personal.jpg",
+            "otros": f"{SUPA_IMG}/almacen1.jpg",
         }
 
         color_map = {
@@ -272,8 +276,11 @@ def get_categorias(db: DatabaseManager = Depends(get_db)):
             "carniceria": "#f87171",
             "limpieza": "#34d399",
             "verduleria": "#4ade80",
-            "otros": "#94a3b8",
             "ferreteria": "#a78bfa",
+            "lacteos": "#93c5fd",
+            "servicios": "#fb923c",
+            "higiene personal": "#f472b6",
+            "otros": "#94a3b8",
         }
 
         categorias = []
@@ -282,7 +289,7 @@ def get_categorias(db: DatabaseManager = Depends(get_db)):
             categorias.append({
                 "id_cate": str(cat.get("id", "")),
                 "nombre_cate": cat.get("nombre", ""),
-                "icono_cate": icon_map.get(nombre_key, "📦"),
+                "icono_cate": icon_map.get(nombre_key, f"{SUPA_IMG}/almacen1.jpg"),
                 "color": color_map.get(nombre_key, "#e8c4a0"),
                 "cantidad_prod": 0
             })
@@ -768,34 +775,6 @@ def get_product_price_full(
 
         # 4. Stats
         todos_precios = [p["precio"] for p in series]
-
-        # Incluir precios actuales de todos los comercios con el mismo nombre
-        # FIX: usar ilike para case-insensitive + trim para espacios + logs DEBUG
-        try:
-            nombre_normalizado = nombre.strip()
-            print(f"DEBUG price-full: buscando productos con nombre='{nombre_normalizado}'")
-
-            otros_res = db.supabase.table('producto') \
-                .select('precio_prod, nombre_prod, comercio_prod') \
-                .ilike('nombre_prod', nombre_normalizado) \
-                .eq('activo_prod', True) \
-                .execute()
-
-            otros_precios = []
-            for otro in (otros_res.data or []):
-                if otro.get('precio_prod') is not None:
-                    p = float(otro['precio_prod'])
-                    otros_precios.append(p)
-                    todos_precios.append(p)
-
-            print(f"DEBUG price-full: encontrados={len(otros_res.data or [])}, "
-                  f"precios_otros={otros_precios}, "
-                  f"precio_min={min(todos_precios) if todos_precios else actual}, "
-                  f"precio_max={max(todos_precios) if todos_precios else actual}")
-        except Exception as e:
-            print(f"DEBUG price-full ERROR: {e}")
-            pass  # no crítico
-
         precio_min = min(todos_precios) if todos_precios else actual
         precio_max = max(todos_precios) if todos_precios else actual
         avg_price = round(sum(todos_precios) / len(todos_precios), 2) if todos_precios else actual
@@ -893,32 +872,22 @@ def get_historial_producto(
 
         # Incluir precios actuales de todos los comercios con el mismo producto
         # para que el min/max sea real entre todos los competidores
-        # FIX: usar ilike para case-insensitive + trim + logs DEBUG
         try:
-            # El nombre ya lo tenemos de prod_res más arriba
-            nombre_prod = prod_res.data[0].get('nombre_prod', '').strip()
-            print(f"DEBUG historial: buscando productos con nombre='{nombre_prod}'")
-
-            if nombre_prod:
+            nombre_res = db.supabase.table('producto') \
+                .select('nombre_prod') \
+                .eq('id_prod', product_id) \
+                .limit(1).execute()
+            if nombre_res.data:
+                nombre_prod = nombre_res.data[0]['nombre_prod']
                 otros_res = db.supabase.table('producto') \
-                    .select('precio_prod, nombre_prod, comercio_prod') \
-                    .ilike('nombre_prod', nombre_prod) \
+                    .select('precio_prod') \
+                    .eq('nombre_prod', nombre_prod) \
                     .eq('activo_prod', True) \
                     .execute()
-
-                otros_precios = []
                 for otro in (otros_res.data or []):
-                    if otro.get('precio_prod') is not None:
-                        p = float(otro['precio_prod'])
-                        otros_precios.append(p)
-                        precios_lista.append(p)
-
-                print(f"DEBUG historial: encontrados={len(otros_res.data or [])}, "
-                      f"precios_otros={otros_precios}, "
-                      f"precio_min={min(precios_lista) if precios_lista else None}, "
-                      f"precio_max={max(precios_lista) if precios_lista else None}")
-        except Exception as e:
-            print(f"DEBUG historial ERROR: {e}")
+                    if otro['precio_prod']:
+                        precios_lista.append(float(otro['precio_prod']))
+        except Exception:
             pass  # no crítico
 
         precio_minimo = min(precios_lista) if precios_lista else None

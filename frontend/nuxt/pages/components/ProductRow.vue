@@ -1,104 +1,117 @@
-<!-- components/ProductRow.vue -->
 <template>
-  <div class="product-row">
-    <div class="product-img" @click="$emit('compare', { ...product, cantidad: cantidad })">
-      <img :src="product.imagen_prod || '/images/avatar_default.png'" class="thumb" />
+  <div 
+    class="product-row" 
+    :class="{ 
+      'mejor-precio': comparacion?.esMasBarato && comparacion?.totalCompetidores > 1, 
+      'peor-precio': comparacion?.esMasCaro && !comparacion?.esMasBarato && comparacion?.totalCompetidores > 1 
+    }" 
+    @click="$emit('click')"
+  >
+    <div class="row-img">
+      <img :src="product.imagen_prod || '/images/avatar_default.png'" :alt="product.nombre_prod" @error="onImageError" />
     </div>
-    <div class="product-info" @click="$emit('compare', { ...product, cantidad: cantidad })">
-      <h4 class="product-name">{{ product.nombre_prod }}</h4>
-      <p class="product-brand">{{ product.marca_prod }}</p>
-      <p class="product-venue">{{ product.comercio_prod }}</p>
+
+    <div class="row-info">
+      <div class="row-top">
+        <span class="row-categoria">{{ product.cate_prod }}</span>
+
+        <!-- BADGE: Mejor precio (solo si hay competencia y es el mas barato) -->
+        <span 
+          v-if="comparacion?.esMasBarato && comparacion?.totalCompetidores > 1" 
+          class="badge badge-mejor"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          Mejor precio
+        </span>
+
+        <!-- BADGE: % mas caro (si NO es el mas barato y hay competencia) -->
+        <span 
+          v-else-if="comparacion && !comparacion.esMasBarato && comparacion.totalCompetidores > 1 && comparacion.pctVsMin > 0" 
+          class="badge badge-carro"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          +{{ comparacion.pctVsMin }}%
+        </span>
+
+        <!-- BADGE: Unico proveedor (solo 1 competidor = el mismo) -->
+        <span 
+          v-else-if="comparacion?.totalCompetidores === 1 || (!comparacion && product.total_competidores === 1)" 
+          class="badge badge-unico"
+        >
+          Unico
+        </span>
+      </div>
+
+      <h3 class="row-nombre">{{ product.nombre_prod }}</h3>
+      <p class="row-marca">{{ product.marca_prod }} · {{ product.comercio_prod }}</p>
+
+      <div class="row-bottom">
+        <span class="row-precio">${{ formatPrice(product.precio_prod) }}</span>
+        <span v-if="product.cantidad_prod" class="row-unidad">{{ product.cantidad_prod }} {{ product.unidad_prod }}</span>
+
+        <!-- ✅ FECHA -->
+        <span v-if="product.fecha_prod" class="row-fecha">
+          {{ formatDate(product.fecha_prod) }}
+        </span>
+
+        <!-- Indicador de competencia -->
+        <span v-if="comparacion?.totalCompetidores > 1" class="competencia-indicador">
+          {{ comparacion.totalCompetidores }} comercios
+        </span>
+        <span v-else-if="product.total_competidores > 1" class="competencia-indicador">
+          {{ product.total_competidores }} comercios
+        </span>
+      </div>
     </div>
-    <div class="product-actions">
-      <div class="quantity-selector">
-        <button
-          class="qty-btn qty-minus"
-          :disabled="cantidad <= 1"
-          @click="cantidad--"
-          aria-label="Restar"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14"/>
-          </svg>
-        </button>
-        <span class="qty-value">{{ cantidad }}</span>
-        <button
-          class="qty-btn qty-plus"
-          @click="cantidad++"
-          aria-label="Sumar"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14"/>
-            <path d="M12 5v14"/>
-          </svg>
-        </button>
-      </div>
-      <div class="price-action">
-        <span class="price">${{ formatPrice(product.precio_prod) }}</span>
-        <button
-          class="compare-btn"
-          :class="{ compared: wasAdded }"
-          @click="handleCompare"
-          :disabled="comparing"
-        >
-          <span v-if="comparing" class="btn-loading">
-            <span class="loading-spinner loading-spinner--sm" />
-          </span>
-          <span v-else-if="wasAdded" class="compared-text">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-            Agregado
-          </span>
-          <span v-else class="compare-text">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"/>
-              <path d="M7 12h10"/>
-              <path d="M10 18h4"/>
-            </svg>
-            Comparar
-          </span>
-        </button>
-      </div>
+
+    <div class="row-actions">
+      <button class="compare-btn" @click.stop="$emit('compare', { ...product, cantidad: 1 })" title="Agregar a lista">
+        <img src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/carrito.jpg" alt="carrito" width="20" height="20" style="border-radius:4px;object-fit:cover;" />
+      </button>
+      <svg class="row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m9 18 6-6-6-6"/>
+      </svg>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+interface ComparacionData {
+  esMasBarato: boolean
+  esMasCaro: boolean
+  pctVsMin: number
+  totalCompetidores: number
+}
 
-const props = defineProps({
-  product: {
-    type: Object,
-    required: true
-  }
-})
+defineProps<{
+  product: any
+  comparacion?: ComparacionData
+}>()
 
-const emit = defineEmits(['compare'])
+defineEmits(['compare', 'click'])
 
-const cantidad = ref(1)
-const comparing = ref(false)
-const wasAdded = ref(false)
-
-const formatPrice = (price) => {
+function formatPrice(price: string | number): string {
+  if (price === null || price === undefined) return '0'
   return Number(price)?.toLocaleString('es-AR') || '0'
 }
 
-const handleCompare = () => {
-  comparing.value = true
+function formatDate(fecha: string | undefined): string {
+  if (!fecha) return ''
+  const d = new Date(fecha)
+  const hoy = new Date()
+  const diffMs = hoy.getTime() - d.getTime()
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  
+  if (diffDias === 0) return 'Hoy'
+  if (diffDias === 1) return 'Ayer'
+  if (diffDias < 7) return `Hace ${diffDias} días`
+  if (diffDias < 30) return `Hace ${Math.floor(diffDias / 7)} semanas`
+  
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
 
-  emit('compare', {
-    ...props.product,
-    cantidad: cantidad.value
-  })
-
-  wasAdded.value = true
-  comparing.value = false
-
-  setTimeout(() => {
-    wasAdded.value = false
-    cantidad.value = 1
-  }, 2000)
+function onImageError(e: Event) {
+  (e.target as HTMLImageElement).src = '/images/avatar_default.png'
 }
 </script>
 
@@ -107,198 +120,185 @@ const handleCompare = () => {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: 0.875rem;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 0.875rem 1rem;
+  background: var(--bg-card);
   backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   transition: all 0.25s ease;
-}
-
-.product-row:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(232, 196, 160, 0.15);
-  box-shadow: 0 0 20px rgba(232, 196, 160, 0.06);
-}
-
-.product-img {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
   cursor: pointer;
 }
 
-.product-img img {
+.product-row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-glow);
+  transform: translateY(-1px);
+}
+
+.product-row.mejor-precio {
+  border-color: rgba(52, 211, 153, 0.3);
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.05), var(--bg-card));
+}
+
+.product-row.peor-precio {
+  border-color: rgba(251, 113, 133, 0.2);
+}
+
+.row-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.row-img img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.product-info {
+.row-info {
   flex: 1;
   min-width: 0;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
-.product-name {
-  color: #f5f0eb;
+.row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.row-categoria {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.row-fecha {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.badge-mejor {
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d399;
+}
+
+.badge-carro {
+  background: rgba(251, 113, 133, 0.12);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+  color: #fb7185;
+}
+
+.badge-unico {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
+  font-size: 0.65rem;
+}
+
+.row-nombre {
   font-size: 0.9rem;
-  font-weight: 500;
-  margin: 0 0 0.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.product-brand {
-  color: rgba(245, 240, 235, 0.5);
+.row-marca {
   font-size: 0.78rem;
-  margin: 0 0 0.1rem;
-}
-
-.product-venue {
-  color: rgba(245, 240, 235, 0.35);
-  font-size: 0.72rem;
+  color: var(--text-secondary);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.product-actions {
+.row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.row-precio {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.row-unidad {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.competencia-indicador {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+}
+
+.row-actions {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
 }
 
-.quantity-selector {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.qty-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: rgba(245, 240, 235, 0.6);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.qty-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f5f0eb;
-}
-
-.qty-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.qty-minus { border-right: 1px solid rgba(255, 255, 255, 0.06); }
-.qty-plus { border-left: 1px solid rgba(255, 255, 255, 0.06); }
-
-.qty-value {
-  min-width: 28px;
-  text-align: center;
-  color: #f5f0eb;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 0 0.25rem;
-}
-
-.price-action {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.375rem;
-}
-
-.price {
-  color: #4ade80;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
 .compare-btn {
-  padding: 0.4rem 0.875rem;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.1));
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  color: #c4b5fd;
-  font-size: 0.78rem;
-  font-weight: 600;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  color: #a78bfa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.25s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 100px;
-  justify-content: center;
+  transition: all 0.2s;
 }
 
-.compare-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.3), rgba(167, 139, 250, 0.2));
-  border-color: rgba(167, 139, 250, 0.5);
-  color: #ddd6fe;
-  transform: translateY(-1px);
+.compare-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+  transform: scale(1.05);
 }
 
-.compare-btn.compared {
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15), rgba(52, 211, 153, 0.1));
-  border-color: rgba(52, 211, 153, 0.3);
-  color: #6ee7b7;
+.row-arrow {
+  color: var(--text-muted);
+  opacity: 0.4;
+  transition: all 0.2s;
 }
 
-.compare-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.compare-text, .compared-text {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.btn-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-spinner {
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #e8c4a0;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-spinner--sm {
-  width: 14px;
-  height: 14px;
-  border-width: 1.5px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (max-width: 380px) {
-  .product-row { gap: 0.625rem; padding: 0.75rem; }
-  .product-img { width: 44px; height: 44px; }
-  .product-name { font-size: 0.85rem; }
+.product-row:hover .row-arrow {
+  opacity: 1;
+  color: var(--accent-gold);
+  transform: translateX(2px);
 }
 </style>

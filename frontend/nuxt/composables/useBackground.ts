@@ -16,7 +16,7 @@ export interface FondoConfig {
 // ── CONFIGURACION ────────────────────────────────────────────
 const INTERVALO_MINUTOS = 5
 
-const FONDOS: FondoConfig[] = [
+const FONDOS_DARK: FondoConfig[] = [
   { id: 'fondo-01', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparapp01.jpg', descripcion: 'Fondo 1' },
   { id: 'fondo-02', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparapp02.jpg', descripcion: 'Fondo 2' },
   { id: 'fondo-03', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparapp03.jpg', descripcion: 'Fondo 3' },
@@ -26,15 +26,31 @@ const FONDOS: FondoConfig[] = [
   { id: 'fondo-07', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparapp07.jpg', descripcion: 'Fondo 7' },
 ]
 
+const FONDOS_LIGHT: FondoConfig[] = [
+  { id: 'fondo-claro-01', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/fondoClaro1.jpg', descripcion: 'Fondo Claro 1' },
+  { id: 'fondo-claro-02', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/fondoClaro2.jpg', descripcion: 'Fondo Claro 2' },
+  { id: 'fondo-claro-03', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/fondoClaro3.jpg', descripcion: 'Fondo Claro 3' },
+  { id: 'fondo-claro-04', tipo: 'imagen', valor: 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/fondoClaro4.jpg', descripcion: 'Fondo Claro 4' },
+]
+
 // ── ESTADO GLOBAL ────────────────────────────────────────────
 const indiceFondo = ref(0)
-const fondoActual = ref<FondoConfig>(FONDOS[0])
+const fondoActual = ref<FondoConfig>(FONDOS_DARK[0])
 const isVisible = ref(true)
 let intervaloId: ReturnType<typeof setInterval> | null = null
 let instancias = 0
 
 export function useBackground() {
   const { esDark } = useTema()
+
+  // Lista activa según tema
+  const fondosActivos = computed(() => esDark.value ? FONDOS_DARK : FONDOS_LIGHT)
+
+  // Cuando cambia el tema, reiniciar al primer fondo del nuevo set
+  watch(esDark, (isDark) => {
+    indiceFondo.value = 0
+    fondoActual.value = isDark ? FONDOS_DARK[0] : FONDOS_LIGHT[0]
+  })
 
   const overlayClass = computed(() =>
     esDark.value ? 'bg-black/40' : 'bg-white/25'
@@ -56,18 +72,20 @@ export function useBackground() {
   function siguienteFondo() {
     isVisible.value = false
     setTimeout(() => {
-      indiceFondo.value = (indiceFondo.value + 1) % FONDOS.length
-      fondoActual.value = FONDOS[indiceFondo.value]
+      const lista = fondosActivos.value
+      indiceFondo.value = (indiceFondo.value + 1) % lista.length
+      fondoActual.value = lista[indiceFondo.value]
       isVisible.value = true
     }, 700)
   }
 
   function irAFondo(indice: number) {
-    if (indice < 0 || indice >= FONDOS.length) return
+    const lista = fondosActivos.value
+    if (indice < 0 || indice >= lista.length) return
     isVisible.value = false
     setTimeout(() => {
       indiceFondo.value = indice
-      fondoActual.value = FONDOS[indice]
+      fondoActual.value = lista[indice]
       isVisible.value = true
     }, 700)
   }
@@ -83,7 +101,7 @@ export function useBackground() {
   })
 
   return {
-    fondos: readonly(FONDOS),
+    fondos: readonly(fondosActivos),
     fondoActual: readonly(fondoActual),
     indiceFondo: readonly(indiceFondo),
     isVisible,

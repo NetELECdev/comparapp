@@ -121,6 +121,7 @@
                 :data="chartData"
                 :width="520"
                 :height="180"
+                :refMax="stats?.max"
             />
             </div>
 
@@ -178,9 +179,7 @@
           <!-- Footer actions -->
           <div class="modal-footer">
             <button class="btn-compare" @click="addToCompare">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>
-              </svg>
+              <img src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/carrito.jpg" alt="carrito" width="20" height="20" style="border-radius:4px;object-fit:cover;" />
               Agregar a comparar
             </button>
             <button class="btn-close" @click="close">Cerrar</button>
@@ -309,21 +308,9 @@ async function cargarHistorial(dias: number) {
       precio: parseFloat(props.product.precio_prod) || 0
     }
 
-    // Agregar precios actuales de competidores como puntos adicionales en la serie
-    // para que el gráfico refleje el rango real de precios entre comercios
-    const puntosCompetidores = competidores.value
-      .filter((c: any) => c.id_prod !== props.product.id_prod)
-      .map((c: any) => ({
-        fecha: c.fecha_prod || new Date().toISOString(),
-        precio: parseFloat(c.precio_prod) || 0,
-        esCompetidor: true
-      }))
-      .filter((p: any) => p.precio > 0)
-
     if (serieHistorial.length >= 2) {
-      // Historial real + precios actuales de competidores + precio actual
-      chartData.value = [...serieHistorial, ...puntosCompetidores, precioActual]
-        .sort((a: any, b: any) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+      // Solo historial temporal — no mezclar precios de competidores en la curva
+      chartData.value = [...serieHistorial, precioActual]
     } else {
       // Sin historial: evolución de precios entre competidores + precio actual
       chartData.value = [...serieCompetidores, precioActual]

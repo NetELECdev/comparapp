@@ -4,7 +4,7 @@
       <!-- HEADER -->
       <header class="page-header animate-fade-in-up">
         <div class="header-left">
-          <button class="back-btn" @click="navigateTo('/productos/lista')" aria-label="Volver">
+          <button class="back-btn" @click="navigateTo('/productos')" aria-label="Volver">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m15 18-6-6 6-6"/>
             </svg>
@@ -348,7 +348,7 @@
         </div>
         <h3>Producto no encontrado</h3>
         <p>El producto que buscas no existe o fue eliminado</p>
-        <button class="back-btn-text" @click="navigateTo('/productos/lista')">Volver al listado</button>
+        <button class="back-btn-text" @click="navigateTo('/productos')">Volver al listado</button>
       </div>
     </main>
   </div>

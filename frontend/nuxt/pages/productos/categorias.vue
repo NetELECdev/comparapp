@@ -30,7 +30,7 @@
         <NuxtLink
           v-for="(cat, index) in categoriasOrdenadas"
           :key="cat.id_cate"
-          :to="`/productos/lista?categoria=${encodeURIComponent(cat.nombre_cate)}`"
+          :to="`/productos?categoria=${encodeURIComponent(cat.nombre_cate)}`"
           class="categoria-card"
           :class="`stagger-${Math.min(index + 2, 8)}`"
         >
