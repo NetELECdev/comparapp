@@ -1,7 +1,6 @@
 <template>
   <div class="comparaciones-page">
-    <div class="bg-gradient" />
-    <div class="bg-noise" />
+    <DynamicBackground />
 
     <main class="page-content">
       <!-- HEADER -->
@@ -126,9 +125,10 @@
               <p class="item-venue">{{ prod.comercio_prod }}</p>
               <div class="item-qty">Cantidad: {{ prod.cantidad }}</div>
               <div class="item-fecha-distancia">
-                <div v-if="prod.fecha_prod" class="item-fecha">
+                <div v-if="prod.fecha_prod" class="item-fecha" :class="{ 'item-fecha--vencida': esPrecioVencido(prod.fecha_prod) }">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                   {{ formatFecha(prod.fecha_prod) }}
+                  <span v-if="esPrecioVencido(prod.fecha_prod)" class="item-fecha-aviso">· puede no estar disponible</span>
                 </div>
                 <div v-if="distanciasPorComercio[prod.comercio_prod]" class="item-distancia">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
@@ -418,6 +418,15 @@ const formatFecha = (fecha: string): string => {
   })
 }
 
+// Mismo criterio que en el detalle de producto: precios sin actualizar
+// hace más de 7 días pueden no representar el precio real del comercio
+const LIMITE_DIAS_PRECIO = 7
+const esPrecioVencido = (fecha: string): boolean => {
+  if (!fecha) return false
+  const dias = (Date.now() - new Date(fecha).getTime()) / (1000 * 60 * 60 * 24)
+  return dias > LIMITE_DIAS_PRECIO
+}
+
 const removerProducto = (id: string) => {
   productos.value = productos.value.filter(p => p.id_prod !== id)
   localStorage.setItem('comparapp_comparacion', JSON.stringify(productos.value))
@@ -448,52 +457,14 @@ const recargarHistorial = (h: HistorialItem) => {
 </script>
 
 <style scoped>
+/* Sin tokens locales — usa las variables globales del tema */
 .comparaciones-page {
-  --bg-deep: #0a0a0f;
-  --bg-card: rgba(255, 255, 255, 0.03);
-  --bg-card-hover: rgba(255, 255, 255, 0.06);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(232, 196, 160, 0.25);
-  --text-primary: #f5f0eb;
-  --text-secondary: rgba(245, 240, 235, 0.6);
-  --text-muted: rgba(245, 240, 235, 0.35);
-  --accent-gold: #e8c4a0;
-  --accent-violet: #a78bfa;
-  --accent-green: #4ade80;
-  --accent-rose: #fb7185;
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
-  --shadow-glow: 0 0 20px rgba(232, 196, 160, 0.12);
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.2);
-
   position: relative;
   min-height: 100vh;
-  background: var(--bg-deep);
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-}
-
-.bg-gradient {
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 196, 160, 0.08), transparent),
-    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(167, 139, 250, 0.05), transparent),
-    linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 40%, #0a0a0f 100%);
-  z-index: 0;
-}
-
-.bg-noise {
-  position: fixed;
-  inset: 0;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  z-index: 1;
-  pointer-events: none;
 }
 
 .page-content {
@@ -1038,7 +1009,10 @@ const recargarHistorial = (h: HistorialItem) => {
   font-size: 0.7rem;
   color: var(--text-muted);
   margin-top: 2px;
+  flex-wrap: wrap;
 }
+.item-fecha--vencida { color: #fbbf24; }
+.item-fecha-aviso { color: #fbbf24; font-weight: 600; }
 
 .historial-fecha {
   color: var(--text-secondary);

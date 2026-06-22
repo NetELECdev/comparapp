@@ -73,6 +73,16 @@
           <span>Buscando comparacion...</span>
         </div>
 
+        <div v-else-if="mismoNombre && mismoNombre.sin_datos_recientes" class="same-name-sin-datos">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+          </svg>
+          <p>Sin precios actualizados en los últimos {{ mismoNombre.limite_dias || 7 }} días para comparar.</p>
+          <NuxtLink :to="`/productos/${producto.id_prod}/historial`" class="ver-historico-link">
+            Ver histórico completo ({{ mismoNombre.count_total_sin_filtro }} registros)
+          </NuxtLink>
+        </div>
+
         <div v-else-if="mismoNombre && mismoNombre.results && mismoNombre.results.length > 1" class="same-name-section">
           <div class="same-name-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -81,6 +91,7 @@
             <span>Comparación por comercio</span>
             <span class="same-name-count">{{ mismoNombre.results.length }} opciones</span>
           </div>
+          <p class="same-name-vigencia">Precios actualizados en los últimos {{ mismoNombre.limite_dias || 7 }} días</p>
 
           <div class="same-name-stats" v-if="mismoNombre.stats">
             <span class="sns-item sns-min">
@@ -336,7 +347,27 @@
               Comparar
             </span>
           </button>
+
+          <button
+            class="add-list-btn-detalle"
+            :disabled="precioDesactualizado"
+            :title="precioDesactualizado ? `Precio sin actualizar hace ${diasDesdeActualizacion} días — no se puede agregar a la lista` : 'Agregar a una lista de compras'"
+            @click="abrirSelectorLista"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="2"/>
+              <path d="M9 12h6"/><path d="M9 16h4"/>
+            </svg>
+            Agregar a lista
+          </button>
         </div>
+
+        <!-- Aviso de precio desactualizado -->
+        <p v-if="precioDesactualizado" class="precio-desactualizado-aviso">
+          ⚠️ Precio sin actualizar hace {{ diasDesdeActualizacion }} días. Puede no estar disponible en el comercio.
+          <NuxtLink :to="`/productos/${producto.id_prod}/historial`" class="ver-historico-link">Ver histórico de precios</NuxtLink>
+        </p>
       </div>
 
       <!-- ERROR -->
@@ -351,6 +382,51 @@
         <button class="back-btn-text" @click="navigateTo('/productos')">Volver al listado</button>
       </div>
     </main>
+
+    <!-- MODAL: Elegir lista -->
+    <Teleport to="body">
+      <div v-if="mostrarSelectorLista" class="modal-overlay" @click.self="mostrarSelectorLista = false">
+        <div class="modal-card selector-lista-card">
+          <h3 class="modal-title">Agregar a una lista</h3>
+
+          <div v-if="loadingListas" class="selector-lista-loading">
+            <div class="loading-spinner" />
+            <span>Cargando tus listas...</span>
+          </div>
+
+          <div v-else-if="misListas.length === 0" class="selector-lista-empty">
+            <p>Todavía no tenés listas creadas.</p>
+            <button class="modal-btn-confirm" @click="crearYAgregar">Crear lista nueva</button>
+          </div>
+
+          <div v-else class="selector-lista-items">
+            <button
+              v-for="lista in misListas"
+              :key="lista.id_lista"
+              class="selector-lista-item"
+              :disabled="agregandoA === lista.id_lista"
+              @click="agregarAListaSeleccionada(lista.id_lista)"
+            >
+              <span class="selector-lista-nombre">{{ lista.nombre_lista }}</span>
+              <span v-if="agregandoA === lista.id_lista" class="selector-lista-loading-mini">...</span>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/><path d="M12 5v14"/>
+              </svg>
+            </button>
+
+            <button class="selector-lista-item selector-lista-nueva" @click="crearYAgregar">
+              <span class="selector-lista-nombre">+ Crear lista nueva</span>
+            </button>
+          </div>
+
+          <p v-if="mensajeListaError" class="selector-lista-error">{{ mensajeListaError }}</p>
+
+          <div class="modal-actions">
+            <button class="modal-btn-cancel" @click="mostrarSelectorLista = false">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -372,6 +448,7 @@ interface Producto {
   describe_prod?: string
   cantidad_prod?: number
   unidad_prod?: string
+  fecha_prod?: string
 }
 
 interface PuntoHistorial { precio: number; fecha: string }
@@ -392,6 +469,9 @@ interface Historial {
 interface SameNameResponse {
   nombre: string
   count: number
+  count_total_sin_filtro?: number
+  sin_datos_recientes?: boolean
+  limite_dias?: number
   stats: {
     min: number
     max: number
@@ -424,11 +504,109 @@ const mismoNombre = ref<SameNameResponse | null>(null)
 const cantidad = ref(1)
 const wasAdded = ref(false)
 
+// ─── Limitación temporal: agregar a lista solo si el precio es reciente ────
+const LIMITE_DIAS_PRECIO = 7
+
+const diasDesdeActualizacion = computed(() => {
+  if (!producto.value?.fecha_prod) return null
+  const fecha = new Date(producto.value.fecha_prod)
+  const ahora = new Date()
+  const ms = ahora.getTime() - fecha.getTime()
+  return Math.floor(ms / (1000 * 60 * 60 * 24))
+})
+
+const precioDesactualizado = computed(() => {
+  const dias = diasDesdeActualizacion.value
+  return dias !== null && dias > LIMITE_DIAS_PRECIO
+})
+
+// ─── Selector de lista ──────────────────────────────────────────
+interface Lista { id_lista: string; nombre_lista: string }
+const mostrarSelectorLista = ref(false)
+const misListas = ref<Lista[]>([])
+const loadingListas = ref(false)
+const agregandoA = ref<string | null>(null)
+const mensajeListaError = ref('')
+
+function getToken() {
+  try {
+    const stored = localStorage.getItem('comparapp_user')
+    return stored ? JSON.parse(stored).access_token || '' : ''
+  } catch { return '' }
+}
+
+async function abrirSelectorLista() {
+  if (precioDesactualizado.value) return
+  mostrarSelectorLista.value = true
+  mensajeListaError.value = ''
+  loadingListas.value = true
+  try {
+    const token = getToken()
+    const res = await api<{ count: number; results: Lista[] }>('/listas', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    misListas.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando listas:', err)
+    mensajeListaError.value = 'No se pudieron cargar tus listas'
+  } finally {
+    loadingListas.value = false
+  }
+}
+
+async function agregarAListaSeleccionada(listaId: string) {
+  if (!producto.value) return
+  agregandoA.value = listaId
+  mensajeListaError.value = ''
+  try {
+    const token = getToken()
+    await api(`/listas/${listaId}/items`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: {
+        id_prod: producto.value.id_prod,
+        nombre_item: producto.value.nombre_prod,
+        cantidad: cantidad.value,
+        unidad: producto.value.unidad_prod || '',
+        marca: producto.value.marca_prod || '',
+        precio_referencia: parseFloat(producto.value.precio_prod),
+      }
+    })
+    mostrarSelectorLista.value = false
+  } catch (err) {
+    console.error('Error agregando a lista:', err)
+    mensajeListaError.value = 'No se pudo agregar el producto a la lista'
+  } finally {
+    agregandoA.value = null
+  }
+}
+
+async function crearYAgregar() {
+  if (!producto.value) return
+  const nombre = prompt('Nombre de la nueva lista:')
+  if (!nombre || !nombre.trim()) return
+  mensajeListaError.value = ''
+  try {
+    const token = getToken()
+    const res = await api<{ data: Lista }>('/listas', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: { nombre_lista: nombre.trim() }
+    })
+    if (res?.data?.id_lista) {
+      await agregarAListaSeleccionada(res.data.id_lista)
+    }
+  } catch (err) {
+    console.error('Error creando lista:', err)
+    mensajeListaError.value = 'No se pudo crear la lista'
+  }
+}
+
 // ─── API helper con prefix correcto ────────────────────────────
 async function api<T>(endpoint: string, opts?: any): Promise<T> {
+  // apiBase ya incluye /api/v1 (ver runtimeConfig) — no duplicar el prefijo
   const base = config.public.apiBase || ''
-  const url = endpoint.startsWith('/api/v1/') ? endpoint : `/api/v1${endpoint}`
-  const fullUrl = `${base}${url}`
+  const fullUrl = `${base}${endpoint}`
   const res = await $fetch<T>(fullUrl, opts)
   return res
 }
@@ -694,9 +872,14 @@ onMounted(async () => {
 
 /* ─── IMAGEN ─── */
 .detalle-img {
-  width: 100%; aspect-ratio: 1; border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 280px;
+  max-height: 240px;
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
   overflow: hidden; background: var(--bg-input);
   display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
 }
 .detalle-img img { width: 100%; height: 100%; object-fit: contain; padding: 1rem; }
 
@@ -944,7 +1127,7 @@ onMounted(async () => {
 
 /* ─── ACCIONES ─── */
 .detalle-acciones {
-  display: flex; align-items: center; gap: 0.875rem;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
   margin-top: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle);
 }
 .quantity-selector {
@@ -960,7 +1143,7 @@ onMounted(async () => {
 .qty-value { min-width: 36px; text-align: center; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; padding: 0 0.25rem; }
 
 .compare-btn-detalle {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  flex: 1; min-width: 130px; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
   padding: 0.75rem 1.25rem;
   background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(167,139,250,0.1));
   border: 1px solid rgba(167,139,250,0.3); border-radius: var(--radius-md);
@@ -969,6 +1152,69 @@ onMounted(async () => {
 .compare-btn-detalle:hover:not(:disabled) { background: linear-gradient(135deg, rgba(167,139,250,0.3), rgba(167,139,250,0.2)); border-color: rgba(167,139,250,0.5); color: #ddd6fe; transform: translateY(-2px); }
 .compare-btn-detalle.added { background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.1)); border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
 .compare-btn-detalle:disabled { cursor: default; }
+
+.add-list-btn-detalle {
+  flex: 1; min-width: 150px; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, rgba(232,196,160,0.22), rgba(232,196,160,0.12));
+  border: 1px solid rgba(232,196,160,0.35); border-radius: var(--radius-md);
+  color: var(--accent-gold); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.25s ease;
+}
+.add-list-btn-detalle:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(232,196,160,0.32), rgba(232,196,160,0.18));
+  border-color: rgba(232,196,160,0.55); transform: translateY(-2px);
+}
+.add-list-btn-detalle:disabled {
+  opacity: 0.4; cursor: not-allowed; transform: none;
+}
+
+.precio-desactualizado-aviso {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: var(--radius-sm);
+  color: #fbbf24;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.ver-historico-link {
+  display: inline-block; margin-top: 0.25rem;
+  color: var(--accent-gold); text-decoration: underline; font-weight: 600;
+}
+
+/* ─── MODAL SELECTOR DE LISTA ─── */
+.selector-lista-card { max-width: 380px; }
+.selector-lista-loading {
+  display: flex; align-items: center; gap: 0.625rem;
+  padding: 1.5rem 0; color: var(--text-secondary); font-size: 0.85rem;
+}
+.selector-lista-empty {
+  display: flex; flex-direction: column; gap: 0.875rem; align-items: center;
+  padding: 1.25rem 0; color: var(--text-secondary); font-size: 0.85rem; text-align: center;
+}
+.selector-lista-items {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  max-height: 320px; overflow-y: auto;
+}
+.selector-lista-item {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 0.75rem 1rem;
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); color: var(--text-primary);
+  font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;
+}
+.selector-lista-item:hover:not(:disabled) { background: var(--bg-card-hover); border-color: var(--border-glow); }
+.selector-lista-item:disabled { opacity: 0.6; cursor: wait; }
+.selector-lista-item svg { color: var(--text-muted); flex-shrink: 0; }
+.selector-lista-nueva {
+  border-style: dashed; color: var(--accent-gold); justify-content: center;
+}
+.selector-lista-loading-mini { font-size: 0.8rem; color: var(--text-muted); }
+.selector-lista-error {
+  margin-top: 0.5rem; color: #fb7185; font-size: 0.8rem; text-align: center;
+}
 
 /* ─── EMPTY STATE ─── */
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 4rem 1rem; text-align: center; }
@@ -1064,5 +1310,32 @@ onMounted(async () => {
   .historial-header-row { flex-wrap: wrap; }
   .historial-link-btn { font-size: 0.68rem; padding: 0.3rem 0.6rem; }
   .same-name-stats { gap: 0.5rem; }
+  .detalle-img { max-width: 200px; max-height: 180px; }
 }
+/* ─── MODAL BASE ─── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+}
+.modal-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glow);
+  border-radius: 20px; padding: 1.5rem; width: 100%; max-width: 360px;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+.modal-title { color: var(--text-primary); font-size: 1.05rem; font-weight: 700; margin: 0; }
+.modal-actions { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
+.modal-btn-cancel {
+  flex: 1; padding: 0.75rem; border-radius: 12px;
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  color: var(--text-secondary); font-size: 0.9rem; cursor: pointer;
+}
+.modal-btn-confirm {
+  flex: 1; padding: 0.75rem; border-radius: 12px;
+  background: var(--accent-gold-dim); border: 1px solid var(--border-glow);
+  color: var(--accent-gold); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.modal-btn-confirm:hover { background: var(--bg-card-hover); }
 </style>

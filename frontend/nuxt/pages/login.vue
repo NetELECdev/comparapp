@@ -1,5 +1,6 @@
 <template>
-  <div class="login-wrapper">  <!-- ← CAMBIO: class="app-page" → class="login-wrapper" -->
+  <div class="login-wrapper">
+    <div class="login-bg-fixed" aria-hidden="true" />
     <main class="login-content">
       <!-- LOGO -->
       <div class="logo-section animate-fade-in-up">
@@ -241,6 +242,26 @@ function handleError(err: any) {
 </script>
 
 <style scoped>
+/* ─── LOGIN SIEMPRE OSCURO ───
+   El login no debe depender del tema global del dashboard — queda fijo en
+   oscuro sin importar el modo claro/oscuro del resto de la app. */
+.login-wrapper {
+  --app-text-primary: #f5f0eb;
+  --app-text-secondary: rgba(245, 240, 235, 0.65);
+  --app-text-muted: rgba(245, 240, 235, 0.4);
+  --app-border-subtle: rgba(255, 255, 255, 0.08);
+  --app-border-glow: rgba(232, 196, 160, 0.3);
+  --app-gold: #e8c4a0;
+  --app-radius-sm: 10px;
+  --app-radius-md: 14px;
+  --app-shadow-glow: 0 0 20px rgba(232, 196, 160, 0.12);
+}
+.login-bg-fixed {
+  position: fixed; inset: 0; z-index: -1;
+  background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 196, 160, 0.08), transparent),
+              linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 100%);
+}
+
 /* ─── LOGIN WRAPPER — contenedor raíz transparente ─── */
 /* ← CAMBIO: reemplaza .app-page, sin fondo propio para dejar ver el fondo global de app.vue */
 .login-wrapper {

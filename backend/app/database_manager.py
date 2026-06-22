@@ -269,7 +269,10 @@ class DatabaseManager:
                         "nombre_completo_user": custom_data.get("nombre_completo_user"),
                         "rol_user": custom_data.get("rol_user", "usuario"),
                         "telefono_user": custom_data.get("telefono_user"),
-                        "activo_user": custom_data.get("activo_user", True)
+                        "activo_user": custom_data.get("activo_user", True),
+                        "id_comer": custom_data.get("id_comer"),
+                        "es_comercio_user": custom_data.get("es_comercio_user", False),
+                        "comercio_verificado_user": custom_data.get("comercio_verificado_user", False)
                     })
                 
                 self.set_current_user(user_data)
@@ -362,19 +365,44 @@ class DatabaseManager:
         """
         Crea un producto nuevo o actualiza el precio si ya existe
         uno con nombre similar + mismo comercio.
+
+        Permisos:
+        - admin: puede crear productos para cualquier comercio
+        - comercio (verificado): solo puede crear productos para SU PROPIO comercio
         """
-        if not self.is_admin():
+        rol = self.get_user_role()
+        if rol not in ('admin', 'comercio'):
             return False, "Permisos insuficientes"
-        
+
         try:
             from datetime import datetime
-            
+
             nombre = product_data.get('nombre_prod', '').strip()
             comercio = product_data.get('comercio_prod', '').strip()
             nuevo_precio = product_data.get('precio_prod')
-            
+
             if not nombre or not comercio:
                 return False, "nombre_prod y comercio_prod son requeridos"
+
+            # Si es un usuario tipo "comercio" (no admin), forzar que solo
+            # pueda cargar productos a nombre de SU PROPIO comercio asignado
+            if rol == 'comercio':
+                mi_id_comer = (self.current_user or {}).get('id_comer')
+                if not mi_id_comer:
+                    return False, "Tu cuenta de comercio no está vinculada correctamente. Contactá al administrador."
+
+                comer_res = self.supabase.table('comercio')\
+                    .select('nombre_comer')\
+                    .eq('id_comer', mi_id_comer)\
+                    .maybe_single()\
+                    .execute()
+
+                if not comer_res.data:
+                    return False, "No se encontró tu comercio asignado"
+
+                nombre_mi_comercio = comer_res.data['nombre_comer']
+                if comercio != nombre_mi_comercio:
+                    return False, f"Solo podés cargar productos para tu comercio: {nombre_mi_comercio}"
             
             # Normalizar nombre para búsqueda de duplicados
             nombre_normalizado = self._normalize_product_name(nombre)

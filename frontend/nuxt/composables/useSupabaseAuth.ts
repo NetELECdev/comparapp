@@ -27,7 +27,12 @@ export function useSupabaseAuth() {
     if (!supabase) throw new Error('Solo disponible en el navegador')
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: REDIRECT_URL }
+      options: {
+        redirectTo: REDIRECT_URL,
+        // Fuerza a Google a mostrar siempre el selector de cuentas,
+        // en vez de asumir la última sesión activa en el navegador.
+        queryParams: { prompt: 'select_account' }
+      }
     })
     if (error) throw error
     return data

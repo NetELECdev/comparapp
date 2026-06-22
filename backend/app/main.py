@@ -7,7 +7,8 @@ Descripcion:
     supabase_config.py y database_manager.py
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body, UploadFile, File
+import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
@@ -97,11 +98,18 @@ def set_user_from_token(db: DatabaseManager, authorization: Optional[str]):
                     "id": user.user.id,
                     "user_metadata": user.user.user_metadata or {}
                 }
-                # Leer rol desde tabla users
+                # Leer rol y datos de comercio desde tabla users
                 try:
-                    user_res = db.supabase.table("users").select("rol_user").eq("id_user", user.user.id).execute()
+                    user_res = db.supabase.table("users")\
+                        .select("rol_user, id_comer, es_comercio_user, comercio_verificado_user")\
+                        .eq("id_user", user.user.id)\
+                        .execute()
                     if user_res.data and len(user_res.data) > 0:
-                        user_data["rol_user"] = user_res.data[0].get("rol_user", "usuario")
+                        row = user_res.data[0]
+                        user_data["rol_user"] = row.get("rol_user", "usuario")
+                        user_data["id_comer"] = row.get("id_comer")
+                        user_data["es_comercio_user"] = row.get("es_comercio_user", False)
+                        user_data["comercio_verificado_user"] = row.get("comercio_verificado_user", False)
                 except Exception:
                     pass
                 db.set_current_user(user_data)
@@ -207,9 +215,11 @@ def google_oauth_callback(
             res = db.supabase.table("users")                .select("*")                .eq("email_user", user_email)                .execute()
             existing = res if res.data else None
 
-        if existing.data:
-            # Ya existe — actualizar último acceso
+        if existing and existing.data:
+            # Ya existe — mantenemos el nombre que ya tenía en la BD,
+            # no lo pisamos con el que mande Google en este login
             user_data = existing.data[0]
+            nombre_final = user_data.get("nombre_completo_user") or user_data.get("nombre_completo") or user_nombre
         else:
             # Crear nuevo usuario en tabla users
             new_user = {
@@ -221,13 +231,14 @@ def google_oauth_callback(
             }
             result = db.supabase.table("users").insert(new_user).execute()
             user_data = result.data[0] if result.data else new_user
+            nombre_final = user_nombre
 
         return {
             "message": "Login con Google exitoso",
             "user": {
                 "id": supabase_user_id,
                 "email": user_email,
-                "nombre_completo": user_nombre,
+                "nombre_completo": nombre_final,
                 "rol": user_data.get("rol_user", "usuario"),
                 "access_token": access_token
             }
@@ -2031,6 +2042,352 @@ def delete_item(
 # ---------------------------------------------------
 # Punto de entrada (para ejecutar con uvicorn)
 # ---------------------------------------------------
+
+# ============================================================
+# ENDPOINTS: Registro de comercios + aprobación + carga de productos
+# Pegar en main.py, antes del bloque "if __name__ == '__main__':"
+# Requiere: from fastapi import UploadFile, File  (agregar al import de fastapi si falta)
+# Requiere: import uuid (agregar arriba si falta)
+# ============================================================
+
+# ---------- 1. Listar comercios disponibles (para el selector en registro) ----------
+@app.get("/api/v1/comercios-disponibles", tags=["Comercio Users"])
+def listar_comercios_disponibles(db: DatabaseManager = Depends(get_db)):
+    """
+    Devuelve los comercios activos que todavía no tienen un usuario dueño
+    vinculado y verificado — son los que aparecen en el selector de registro.
+    """
+    try:
+        res = db.supabase.table("comercio") \
+            .select("id_comer, nombre_comer, direccion_comer, cate_comer") \
+            .eq("activo_comer", True) \
+            .order("nombre_comer") \
+            .execute()
+        return {"count": len(res.data or []), "results": res.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 2. Registro de comercio (usuario + vínculo a comercio existente) ----------
+@app.post("/api/v1/register-comercio", tags=["Comercio Users"])
+def register_comercio_user(
+    email: str = Body(...),
+    password: str = Body(...),
+    nombre_completo: str = Body(...),
+    telefono: Optional[str] = Body(None),
+    id_comer: str = Body(..., description="UUID del comercio ya creado por el admin"),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Registra un usuario que será dueño/encargado de un comercio existente.
+    Queda con comercio_verificado_user = false hasta que el admin lo apruebe.
+    """
+    # Verificar que el comercio exista y esté activo
+    comercio_res = db.supabase.table("comercio") \
+        .select("id_comer, nombre_comer") \
+        .eq("id_comer", id_comer) \
+        .eq("activo_comer", True) \
+        .maybe_single() \
+        .execute()
+
+    if not comercio_res.data:
+        raise HTTPException(status_code=404, detail="El comercio seleccionado no existe o no está activo")
+
+    # Verificar que ese comercio no tenga ya un dueño verificado
+    existente = db.supabase.table("users") \
+        .select("id_user") \
+        .eq("id_comer", id_comer) \
+        .eq("comercio_verificado_user", True) \
+        .execute()
+    if existente.data:
+        raise HTTPException(status_code=400, detail="Este comercio ya tiene un usuario verificado asignado")
+
+    # Crear el usuario base (reusa la lógica de register_user)
+    success, msg, user_data = db.register_user(email, password, nombre_completo, telefono)
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+
+    # Marcarlo como comercio pendiente y vincularlo
+    try:
+        db.supabase.table("users").update({
+            "es_comercio_user": True,
+            "comercio_verificado_user": False,
+            "id_comer": id_comer,
+            "rol_user": "comercio"
+        }).eq("id_user", user_data["id_user"]).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Usuario creado pero error al vincular comercio: {str(e)}")
+
+    return {
+        "message": f"Registro recibido. Tu acceso para '{comercio_res.data['nombre_comer']}' está pendiente de aprobación.",
+        "user": user_data
+    }
+
+
+# ---------- 3. Admin: listar comercios pendientes de aprobación ----------
+@app.get("/api/v1/admin/comercios-pendientes", tags=["Comercio Users"])
+def listar_comercios_pendientes(
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    try:
+        res = db.supabase.table("users") \
+            .select("id_user, email_user, nombre_completo_user, telefono_user, fecha_registro_user, id_comer, comercio(nombre_comer, direccion_comer)") \
+            .eq("es_comercio_user", True) \
+            .eq("comercio_verificado_user", False) \
+            .order("fecha_registro_user", desc=True) \
+            .execute()
+        return {"count": len(res.data or []), "results": res.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 4. Admin: aprobar comercio ----------
+@app.post("/api/v1/admin/comercios/{user_id}/aprobar", tags=["Comercio Users"])
+def aprobar_comercio_user(
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    try:
+        res = db.supabase.table("users").update({
+            "comercio_verificado_user": True,
+            "motivo_rechazo_comercio": None
+        }).eq("id_user", user_id).execute()
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return {"message": "Comercio aprobado correctamente", "data": res.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 5. Admin: rechazar comercio ----------
+@app.post("/api/v1/admin/comercios/{user_id}/rechazar", tags=["Comercio Users"])
+def rechazar_comercio_user(
+    user_id: str,
+    motivo: Optional[str] = Body(None, embed=True),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    try:
+        res = db.supabase.table("users").update({
+            "comercio_verificado_user": False,
+            "es_comercio_user": False,
+            "id_comer": None,
+            "motivo_rechazo_comercio": motivo or "No se especificó un motivo"
+        }).eq("id_user", user_id).execute()
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return {"message": "Comercio rechazado", "data": res.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 6. Estado del comercio logueado (para el guard de navegación) ----------
+@app.get("/api/v1/mi-comercio", tags=["Comercio Users"])
+def mi_estado_comercio(
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    try:
+        res = db.supabase.table("users") \
+            .select("es_comercio_user, comercio_verificado_user, motivo_rechazo_comercio, id_comer, comercio(id_comer, nombre_comer, logo_comer)") \
+            .eq("id_user", db.current_user["id"]) \
+            .maybe_single() \
+            .execute()
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return res.data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 7. Subida de imagen de producto al bucket de Supabase Storage ----------
+@app.post("/api/v1/upload-imagen-producto", tags=["Comercio Users"])
+async def upload_imagen_producto(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Sube una imagen al bucket product-images y devuelve la URL pública.
+    Disponible para admin y comercios verificados.
+    """
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    rol = db.get_user_role()
+    if rol not in ("admin", "comercio"):
+        raise HTTPException(status_code=403, detail="Permisos insuficientes")
+
+    # Validar tipo de archivo
+    ext = (file.filename or "").split(".")[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp"):
+        raise HTTPException(status_code=400, detail="Formato de imagen no soportado (usar jpg, png o webp)")
+
+    try:
+        contenido = await file.read()
+        nombre_archivo = f"productos/{uuid.uuid4()}.{ext}"
+
+        db.supabase.storage.from_("product-images").upload(
+            nombre_archivo,
+            contenido,
+            {"content-type": file.content_type or "image/jpeg"}
+        )
+
+        url_publica = db.supabase.storage.from_("product-images").get_public_url(nombre_archivo)
+        return {"url": url_publica}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
+
+
+# ============================================================
+# ENDPOINT: Registro de comercio vía Google OAuth
+# Pegar en main.py junto a los demás endpoints de "Comercio Users"
+# ============================================================
+
+@app.post("/api/v1/register-comercio-google", tags=["Comercio Users"])
+def register_comercio_google(
+    data: dict = Body(...),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Vincula una cuenta de Google ya autenticada (via Supabase OAuth)
+    a un comercio existente, dejando comercio_verificado_user=false.
+    El frontend llama esto desde /auth/callback cuando detecta que
+    el usuario venía del flujo de registro de comercio.
+    """
+    try:
+        access_token = data.get("access_token")
+        email = data.get("email", "")
+        nombre_completo = data.get("nombre_completo", "")
+        id_comer = data.get("id_comer")
+
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Token requerido")
+        if not id_comer:
+            raise HTTPException(status_code=400, detail="id_comer requerido")
+
+        # Verificar que el comercio exista y esté activo
+        comercio_res = db.supabase.table("comercio") \
+            .select("id_comer, nombre_comer") \
+            .eq("id_comer", id_comer) \
+            .eq("activo_comer", True) \
+            .maybe_single() \
+            .execute()
+
+        if not comercio_res.data:
+            raise HTTPException(status_code=404, detail="El comercio seleccionado no existe o no está activo")
+
+        # Verificar que ese comercio no tenga ya un dueño verificado
+        existente = db.supabase.table("users") \
+            .select("id_user") \
+            .eq("id_comer", id_comer) \
+            .eq("comercio_verificado_user", True) \
+            .execute()
+        if existente.data:
+            raise HTTPException(status_code=400, detail="Este comercio ya tiene un usuario verificado asignado")
+
+        # Verificar el token con Supabase para obtener el id real del usuario
+        try:
+            user_resp = db.supabase.auth.get_user(access_token)
+            supabase_user_id = user_resp.user.id
+            user_email = user_resp.user.email or email
+            meta = user_resp.user.user_metadata or {}
+            user_nombre = meta.get("full_name") or meta.get("name") or nombre_completo or user_email
+        except Exception:
+            if not email:
+                raise HTTPException(status_code=401, detail="Token inválido y sin datos de respaldo")
+            supabase_user_id = None
+            user_email = email
+            user_nombre = nombre_completo or email
+
+        if not supabase_user_id:
+            raise HTTPException(status_code=401, detail="No se pudo verificar la identidad de Google")
+
+        # Buscar si ya existe en la tabla users
+        existing_user = db.supabase.table("users") \
+            .select("*") \
+            .eq("id_user", supabase_user_id) \
+            .execute()
+
+        if existing_user.data:
+            # Ya existía (por ejemplo, ya era usuario normal) — lo convertimos a comercio pendiente
+            # Mantenemos el nombre que ya tenía en la BD, no lo pisamos con el de Google
+            user_data = existing_user.data[0]
+            nombre_final = user_data.get("nombre_completo_user") or user_nombre
+            db.supabase.table("users").update({
+                "es_comercio_user": True,
+                "comercio_verificado_user": False,
+                "id_comer": id_comer,
+                "rol_user": "comercio"
+            }).eq("id_user", supabase_user_id).execute()
+        else:
+            # Crear el usuario nuevo, directamente como comercio pendiente
+            new_user = {
+                "id_user": supabase_user_id,
+                "email_user": user_email,
+                "nombre_completo_user": user_nombre,
+                "rol_user": "comercio",
+                "es_comercio_user": True,
+                "comercio_verificado_user": False,
+                "id_comer": id_comer,
+                "comercio_oauth": "google",
+                "activo_user": True,
+            }
+            result = db.supabase.table("users").insert(new_user).execute()
+            user_data = result.data[0] if result.data else new_user
+            nombre_final = user_nombre
+
+        return {
+            "message": f"Registro recibido. Tu acceso para '{comercio_res.data['nombre_comer']}' está pendiente de aprobación.",
+            "user": {
+                "id": supabase_user_id,
+                "email": user_email,
+                "nombre_completo": nombre_final,
+                "rol": "comercio",
+                "es_comercio_user": True,
+                "comercio_verificado_user": False,
+                "id_comer": id_comer,
+                "access_token": access_token
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

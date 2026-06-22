@@ -1,7 +1,6 @@
-<<template>
+<template>
   <div class="comercio-page">
-    <div class="bg-gradient" />
-    <div class="bg-noise" />
+    <DynamicBackground />
 
     <main class="page-content">
       <!-- HEADER -->
@@ -312,37 +311,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Sin tokens locales — usa las variables globales del tema */
 .comercio-page {
-  --bg-deep: #0a0a0f;
-  --bg-card: rgba(255,255,255,0.03);
-  --border-subtle: rgba(255,255,255,0.08);
-  --border-glow: rgba(232,196,160,0.25);
-  --text-primary: #f5f0eb;
-  --text-secondary: rgba(245,240,235,0.6);
-  --text-muted: rgba(245,240,235,0.35);
-  --accent-gold: #e8c4a0;
-  --accent-error: #fb7185;
-  --accent-success: #34d399;
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
   position: relative;
   min-height: 100vh;
-  background: var(--bg-deep);
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-.bg-gradient {
-  position: fixed; inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232,196,160,0.08), transparent),
-              linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 100%);
-  z-index: 0;
-}
-.bg-noise {
-  position: fixed; inset: 0; opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  z-index: 1; pointer-events: none;
 }
 .page-content {
   position: relative; z-index: 2;

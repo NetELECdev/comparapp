@@ -107,27 +107,24 @@
       <!-- 2 cards grandes: Comparador y Productos -->
       <section class="big-cards" aria-label="Accesos principales">
         <button class="big-card big-card--comparador" @click="navigateTo('/comparaciones')">
-          <div class="big-card-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
-              <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
-              <path d="M7 21h10"/><path d="M12 3v18"/>
-              <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>
-            </svg>
+          <div class="big-card-top">
+            <span class="big-card-title">Comparador</span>
+            <div class="big-card-icon">
+              <img src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/compara23.webp" alt="Comparador" loading="lazy" />
+            </div>
           </div>
-          <span class="big-card-label">Comparador</span>
-          <span class="big-card-sub">Compará precios</span>
+          <span class="big-card-label">Ahorra en cada compra</span>
+          <span class="big-card-sub">Consulta precios actualizados y elige la mejor oferta.</span>
         </button>
         <button class="big-card big-card--productos" @click="navigateTo('/productos')">
-          <div class="big-card-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m7.5 4.27 9 5.15"/>
-              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-              <path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
-            </svg>
+          <div class="big-card-top">
+            <span class="big-card-title">Productos</span>
+            <div class="big-card-icon">
+              <img src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/productosProd.webp" alt="Productos" loading="lazy" />
+            </div>
           </div>
-          <span class="big-card-label">Productos</span>
-          <span class="big-card-sub">Explorá todo</span>
+          <span class="big-card-label">Todo en un solo lugar</span>
+          <span class="big-card-sub">Accede a información detallada de cada producto.</span>
         </button>
       </section>
 
@@ -179,7 +176,7 @@
         <div v-if="loadingCategorias" class="cat-carousel">
           <div class="cat-card-skeleton" v-for="n in 5" :key="n" aria-hidden="true" />
         </div>
-        <div v-else class="cat-carousel">
+        <div v-else ref="catCarouselRef" class="cat-carousel">
           <button
             v-for="cat in categorias"
             :key="cat.id_cate"
@@ -206,7 +203,7 @@
         <div v-if="loadingComercios" class="com-carousel">
           <div class="com-item-skeleton" v-for="n in 5" :key="n" aria-hidden="true" />
         </div>
-        <div v-else-if="comercios.length" class="com-carousel">
+        <div v-else-if="comercios.length" ref="comCarouselRef" class="com-carousel">
           <button
             v-for="com in comercios"
             :key="com.id_comer"
@@ -272,7 +269,7 @@
             v-for="p in products.slice(0, 5)"
             :key="p.id_prod"
             class="recent-item"
-            @click="navigateTo(`/productos?q=${encodeURIComponent(p.nombre_prod)}`)"
+            @click="navigateTo(`/productos/lista?q=${encodeURIComponent(p.nombre_prod)}`)"
           >
             <div class="recent-item-img">
               <img
@@ -390,6 +387,12 @@ const getToken = () => {
 
 const SUPABASE = 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images'
 
+// Drag-to-scroll en desktop para los carruseles horizontales
+const catCarouselRef = ref<HTMLElement | null>(null)
+const comCarouselRef = ref<HTMLElement | null>(null)
+useDragScroll(catCarouselRef)
+useDragScroll(comCarouselRef)
+
 // Ubicación del usuario (geolocalización del navegador)
 const ubicacionTexto = ref('Detectar ubicación')
 
@@ -424,7 +427,7 @@ async function solicitarUbicacion() {
 const busquedaDash = ref('')
 function irABusqueda() {
   const q = busquedaDash.value.trim()
-  navigateTo(q ? `/productos?q=${encodeURIComponent(q)}` : '/productos')
+  navigateTo(q ? `/productos/lista?q=${encodeURIComponent(q)}` : '/productos/lista')
 }
 
 // Estructura fiel al dashV1: imagen ilustrativa + título debajo
@@ -754,15 +757,15 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 18px 16px;
+  gap: 8px;
+  padding: 16px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   cursor: pointer;
   text-align: left;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: var(--shadow-card);
-  min-height: 110px;
+  min-height: 150px;
 }
 .big-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-modal); }
 .big-card:active { transform: scale(0.98); }
@@ -776,23 +779,41 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-.big-card-icon {
-  width: 44px; height: 44px;
-  border-radius: 12px;
-  background: var(--bg-card-hover);
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 4px;
+.big-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
 }
-.big-card--comparador .big-card-icon { color: #a78bfa; }
-.big-card--productos .big-card-icon { color: #4ade80; }
+.big-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.big-card-icon {
+  width: 64px; height: 64px;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.big-card-icon img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+}
 
 .big-card-label {
   font-size: 15px; font-weight: 700;
   color: var(--text-primary);
 }
 .big-card-sub {
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 400;
   color: var(--text-secondary);
+  line-height: 1.35;
 }
 
 /* ── 3 mini-cards: Alertas / Favoritos / Historial ── */
@@ -807,7 +828,7 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
-  min-height: 84px;
+  min-height: 100px;
   padding: 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
@@ -852,8 +873,8 @@ onMounted(async () => {
   position: absolute;
   bottom: -6px;
   right: -6px;
-  width: 46px;
-  height: 46px;
+  width: 69px;
+  height: 69px;
   object-fit: contain;
   opacity: 0.95;
   pointer-events: none;
@@ -861,7 +882,7 @@ onMounted(async () => {
 
 @media (max-width: 380px) {
   .mini-card-num { font-size: 17px; }
-  .mini-card-img { width: 38px; height: 38px; }
+  .mini-card-img { width: 57px; height: 57px; }
 }
 
 /* ── Título de sección de carrusel ── */
@@ -881,8 +902,11 @@ onMounted(async () => {
   padding: 2px 2px 10px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
 }
 .cat-carousel::-webkit-scrollbar { display: none; }
+.cat-carousel.is-dragging { cursor: grabbing; scroll-behavior: auto; }
 
 .cat-card {
   display: flex;
@@ -940,8 +964,11 @@ onMounted(async () => {
   padding: 2px 2px 10px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
 }
 .com-carousel::-webkit-scrollbar { display: none; }
+.com-carousel.is-dragging { cursor: grabbing; scroll-behavior: auto; }
 
 .com-item {
   display: flex;

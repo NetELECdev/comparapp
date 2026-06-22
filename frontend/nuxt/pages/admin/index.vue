@@ -79,9 +79,10 @@
 
       <!-- TABS -->
       <div class="tabs-bar animate-fade-in-up stagger-2">
-        <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+        <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id; tab.id === 'comercios-pendientes' && cargarComerciosPendientes()">
           <span v-html="tab.icon"></span>
           <span class="tab-label">{{ tab.label }}</span>
+          <span v-if="tab.id === 'comercios-pendientes' && comerciosPendientes.length > 0" class="tab-badge">{{ comerciosPendientes.length }}</span>
         </button>
       </div>
 
@@ -369,6 +370,43 @@
           <p>Usá el Supabase Dashboard para gestionar usuarios.</p>
         </div>
       </div>
+
+      <!-- TAB: Solicitudes de comercio pendientes -->
+      <div v-if="activeTab === 'comercios-pendientes'" class="tab-content animate-fade-in-up">
+        <div v-if="loadingPendientes" class="empty-state">
+          <div class="loading-spinner" />
+          <p>Cargando solicitudes...</p>
+        </div>
+
+        <div v-else-if="comerciosPendientes.length === 0" class="empty-state">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </div>
+          <h3>Sin solicitudes pendientes</h3>
+          <p>Cuando un comercio se registre, va a aparecer acá para tu revisión.</p>
+        </div>
+
+        <div v-else class="items-list">
+          <article v-for="sol in comerciosPendientes" :key="sol.id_user" class="solicitud-item">
+            <div class="solicitud-info">
+              <span class="item-name">{{ sol.nombre_completo_user }}</span>
+              <span class="solicitud-comercio">{{ sol.comercio?.nombre_comer || 'Sin comercio' }}</span>
+              <span class="solicitud-meta">{{ sol.email_user }} · {{ sol.telefono_user || 'Sin teléfono' }}</span>
+              <span class="solicitud-direccion" v-if="sol.comercio?.direccion_comer">{{ sol.comercio.direccion_comer }}</span>
+            </div>
+            <div class="solicitud-actions">
+              <button class="btn-rechazar" @click="rechazarSolicitud(sol.id_user)" :disabled="procesandoId === sol.id_user">
+                Rechazar
+              </button>
+              <button class="btn-aprobar" @click="aprobarSolicitud(sol.id_user)" :disabled="procesandoId === sol.id_user">
+                {{ procesandoId === sol.id_user ? '...' : 'Aprobar' }}
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
     </main>
 
     <!-- BOTTOM BAR -->
@@ -645,12 +683,86 @@ const activeTab = ref('productos')
 const searchProductos = ref('')
 const searchComercios = ref('')
 
+// ─── Solicitudes de comercio pendientes ──────────────────────
+interface SolicitudComercio {
+  id_user: string
+  email_user: string
+  nombre_completo_user: string
+  telefono_user: string | null
+  fecha_registro_user: string
+  id_comer: string
+  comercio?: { nombre_comer: string; direccion_comer: string }
+}
+const comerciosPendientes = ref<SolicitudComercio[]>([])
+const loadingPendientes = ref(false)
+const procesandoId = ref<string | null>(null)
+
+function getToken() {
+  try {
+    const stored = localStorage.getItem('comparapp_user')
+    return stored ? JSON.parse(stored).access_token || '' : ''
+  } catch { return '' }
+}
+
+async function cargarComerciosPendientes() {
+  loadingPendientes.value = true
+  try {
+    const token = getToken()
+    const res = await $fetch<{ count: number; results: SolicitudComercio[] }>(
+      `${config.public.apiBase}/admin/comercios-pendientes`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    comerciosPendientes.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando solicitudes:', err)
+  } finally {
+    loadingPendientes.value = false
+  }
+}
+
+async function aprobarSolicitud(userId: string) {
+  procesandoId.value = userId
+  try {
+    const token = getToken()
+    await $fetch(`${config.public.apiBase}/admin/comercios/${userId}/aprobar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    comerciosPendientes.value = comerciosPendientes.value.filter(s => s.id_user !== userId)
+    showToast('Comercio aprobado correctamente')
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'Error al aprobar', 'error')
+  } finally {
+    procesandoId.value = null
+  }
+}
+
+async function rechazarSolicitud(userId: string) {
+  const motivo = prompt('Motivo del rechazo (opcional):')
+  procesandoId.value = userId
+  try {
+    const token = getToken()
+    await $fetch(`${config.public.apiBase}/admin/comercios/${userId}/rechazar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: { motivo: motivo || null }
+    })
+    comerciosPendientes.value = comerciosPendientes.value.filter(s => s.id_user !== userId)
+    showToast('Solicitud rechazada')
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'Error al rechazar', 'error')
+  } finally {
+    procesandoId.value = null
+  }
+}
+
 const tabs = [
   { id: 'productos',   label: 'Productos',   icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>' },
   { id: 'comercios', label: 'Comercios', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>' },
   { id: 'categorias',  label: 'Categorías',  icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>' },
   { id: 'ofertas',     label: 'Ofertas',     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' },
   { id: 'usuarios',    label: 'Usuarios',    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+  { id: 'comercios-pendientes', label: 'Solicitudes', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' },
 ]
 
 // ─── COMPUTED ─────────────────────────────────────────────────
@@ -1056,7 +1168,7 @@ async function loadData() {
   }
 }
 
-onMounted(() => { loadData() })
+onMounted(() => { loadData(); cargarComerciosPendientes() })
 </script>
 
 <style scoped>
@@ -1148,6 +1260,40 @@ onMounted(() => { loadData() })
 .tab-btn:hover { background: rgba(255,255,255,0.06); border-color: var(--border-glow); color: var(--text-primary); }
 .tab-btn.active { background: linear-gradient(135deg, rgba(232,196,160,0.12), rgba(167,139,250,0.08)); border-color: rgba(232,196,160,0.25); color: var(--accent-gold); }
 .tab-label { font-size: 0.8rem; }
+.tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: #fb7185; color: #1a1a1a;
+  border-radius: 999px; font-size: 0.68rem; font-weight: 700;
+}
+
+.items-list { display: flex; flex-direction: column; gap: 0.625rem; }
+.solicitud-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.875rem 1rem; background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+.solicitud-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+.solicitud-comercio { font-size: 0.82rem; font-weight: 600; color: var(--accent-gold); }
+.solicitud-meta { font-size: 0.74rem; color: var(--text-secondary); }
+.solicitud-direccion { font-size: 0.72rem; color: var(--text-muted); }
+.solicitud-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.btn-aprobar {
+  padding: 0.5rem 1rem; border-radius: var(--radius-sm);
+  background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.3);
+  color: #6ee7b7; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-aprobar:hover:not(:disabled) { background: rgba(52,211,153,0.25); }
+.btn-aprobar:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-rechazar {
+  padding: 0.5rem 1rem; border-radius: var(--radius-sm);
+  background: rgba(251,113,133,0.1); border: 1px solid rgba(251,113,133,0.25);
+  color: #fb7185; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-rechazar:hover:not(:disabled) { background: rgba(251,113,133,0.2); }
+.btn-rechazar:disabled { opacity: 0.5; cursor: not-allowed; }
+
 
 /* ─── SECTION HEADER ─── */
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
