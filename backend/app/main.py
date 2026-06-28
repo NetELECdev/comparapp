@@ -225,9 +225,8 @@ def google_oauth_callback(
             new_user = {
                 "id_user": supabase_user_id,
                 "email_user": user_email,
-                "nombre_completo": user_nombre,
-                "rol_user": "usuario",
-                "comercio_oauth": "google"
+                "nombre_completo_user": user_nombre,
+                "rol_user": "usuario"
             }
             result = db.supabase.table("users").insert(new_user).execute()
             user_data = result.data[0] if result.data else new_user
@@ -356,12 +355,14 @@ def create_product(
 def search_products_comparison(
     q: str = Query(..., min_length=1, description="Termino de busqueda"),
     limit: int = Query(50, ge=1, le=100),
+    authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
     """
     Busca productos y devuelve datos enriquecidos con comparacion de precios
     entre productos del mismo nombre (distintos comercios).
     """
+    set_user_from_token(db, authorization)
     try:
         import requests
         import traceback
@@ -424,6 +425,12 @@ def search_products_comparison(
                 p['precio_min_grupo'] = float(p['precio_prod'])
                 p['precio_max_grupo'] = float(p['precio_prod'])
 
+        db.save_search_history(
+            search_term=q,
+            search_type='general',
+            results_count=len(productos)
+        )
+
         return {
             "count": len(productos),
             "query": q,
@@ -435,6 +442,24 @@ def search_products_comparison(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error en busqueda: {str(e)}")
+
+
+# 2.5 GET /api/v1/products/destacados — Debe ir ANTES de /products/{product_id}
+# para que FastAPI no la capture como un product_id literal "destacados".
+@app.get("/api/v1/products/destacados", tags=["Productos"])
+def get_productos_destacados(
+    limit: int = Query(10, ge=1, le=30),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Productos 'destacados' — proxy de más buscados mientras no haya
+    tracking real acumulado (ver get_productos_destacados en database_manager).
+    """
+    try:
+        resultados = db.get_productos_destacados(limit=limit)
+        return {"count": len(resultados), "results": resultados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo destacados: {str(e)}")
 
 
 # 3. GET /api/v1/products — Listar todos (estatico, query params)
@@ -494,15 +519,15 @@ def get_same_name_products(
     """
     try:
         # Obtener el producto para saber su nombre
-        product = db.supabase.table('producto')            .select('nombre_prod, precio_prod, comercio_prod, fecha_prod')            .eq('id_prod', product_id)            .eq('activo_prod', True)            .maybe_single()            .execute()
+        product = db.supabase.table('producto')            .select('nombre_prod, precio_prod, comercio_prod, fecha_prod')            .eq('id_prod', product_id)            .eq('activo_prod', True)            .limit(1)            .execute()
 
         if not product.data:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-        nombre = product.data['nombre_prod']
+        nombre = product.data[0]['nombre_prod']
 
         # Buscar todos los productos con ese nombre
-        result = db.supabase.table('producto')            .select('*')            .eq('nombre_prod', nombre)            .eq('activo_prod', True)            .order('precio_prod', desc=False)            .execute()
+        result = db.supabase.table('producto')            .select('*')            .ilike('nombre_prod', nombre)            .eq('activo_prod', True)            .order('precio_prod', desc=False)            .execute()
 
         productos = result.data or []
 
@@ -892,7 +917,7 @@ def get_historial_producto(
                 nombre_prod = nombre_res.data[0]['nombre_prod']
                 otros_res = db.supabase.table('producto') \
                     .select('precio_prod') \
-                    .eq('nombre_prod', nombre_prod) \
+                    .ilike('nombre_prod', nombre_prod) \
                     .eq('activo_prod', True) \
                     .execute()
                 for otro in (otros_res.data or []):
@@ -1030,6 +1055,17 @@ def search_by_date(
 ):
     results = db.search_productos_by_fecha(fecha_desde, fecha_hasta, term)
     return {"count": len(results), "results": results}
+
+@app.get("/api/v1/search-history", tags=["Busqueda avanzada"])
+def get_my_search_history(
+    limit: int = Query(10, ge=1, le=50),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """Historial de búsquedas del usuario autenticado (vacío si no hay sesión)."""
+    set_user_from_token(db, authorization)
+    historial = db.get_search_history(limit=limit)
+    return {"count": len(historial), "results": historial}
 
 # ---------------------------------------------------
 # Apagado y limpieza
@@ -1187,7 +1223,7 @@ def delete_oferta(
         raise HTTPException(status_code=403, detail="Solo administradores pueden eliminar ofertas")
 
     try:
-        response = db.supabase.table('ofertas').update({'activo_oferta': False}).eq('id', oferta_id).execute()
+        response = db.supabase.table('ofertas').update({'activa': False}).eq('id', oferta_id).execute()
 
         if response.data:
             return {"message": "Oferta desactivada correctamente"}
@@ -1279,11 +1315,11 @@ def get_dashboard_stats(
         total_productos = prod_response.count if hasattr(prod_response, 'count') else len(prod_response.data)
 
         # Total comercios
-        prov_response = db.supabase.table('comercio').select('*', count='exact').eq('activo_prov', True).execute()
+        prov_response = db.supabase.table('comercio').select('*', count='exact').eq('activo_comer', True).execute()
         total_comercios = prov_response.count if hasattr(prov_response, 'count') else len(prov_response.data)
 
         # Total ofertas vigentes
-        ofertas_response = db.supabase.table('ofertas').select('*', count='exact').eq('activo_oferta', True).execute()
+        ofertas_response = db.supabase.table('ofertas').select('*', count='exact').eq('activa', True).execute()
         total_ofertas = ofertas_response.count if hasattr(ofertas_response, 'count') else len(ofertas_response.data)
 
         # Total usuarios
@@ -1371,13 +1407,13 @@ def optimize_lista(
             .select('*, lista_item(*)')\
             .eq('id_lista', lista_id)\
             .eq('activa', True)\
-            .maybe_single()\
+            .limit(1)\
             .execute()
 
         if not lista_res.data:
             raise HTTPException(status_code=404, detail="Lista no encontrada")
 
-        items = lista_res.data.get('lista_item', [])
+        items = lista_res.data[0].get('lista_item', [])
         if not items:
             return {"lista_id": lista_id, "items_count": 0, "message": "La lista está vacía",
                     "comercios": [], "mejor_opcion": None, "division_sugerida": None}
@@ -1724,7 +1760,7 @@ def compartir_lista(
             .select('id_lista, user_id')\
             .eq('id_lista', lista_id)\
             .eq('activa', True)\
-            .maybe_single()\
+            .limit(1)\
             .execute()
         
         if not lista.data:
@@ -1768,19 +1804,21 @@ def ver_lista_compartida(
             .eq('codigo', codigo)\
             .eq('activo', True)\
             .gt('expira_en', datetime.now().isoformat())\
-            .maybe_single()\
+            .limit(1)\
             .execute()
         
         if not comp.data:
             raise HTTPException(status_code=404, detail="Código inválido o expirado")
+
+        comp_data = comp.data[0]
         
         # Incrementar usos
         db.supabase.table('lista_compartida')\
-            .update({"usos": comp.data.get('usos', 0) + 1})\
-            .eq('id', comp.data['id'])\
+            .update({"usos": comp_data.get('usos', 0) + 1})\
+            .eq('id', comp_data['id'])\
             .execute()
         
-        lista_id = comp.data['id_lista']
+        lista_id = comp_data['id_lista']
         
         # Obtener items
         items_res = db.supabase.table('lista_item')\
@@ -1789,10 +1827,10 @@ def ver_lista_compartida(
             .execute()
         
         return {
-            "lista": comp.data['lista_compra'],
+            "lista": comp_data['lista_compra'],
             "items": items_res.data or [],
-            "compartido_por": comp.data['creado_por'],
-            "fecha_compartido": comp.data['fecha_creacion']
+            "compartido_por": comp_data['creado_por'],
+            "fecha_compartido": comp_data['fecha_creacion']
         }
         
     except HTTPException:
@@ -1817,26 +1855,30 @@ def copiar_lista_compartida(
             .select('id_lista')\
             .eq('codigo', codigo)\
             .eq('activo', True)\
-            .maybe_single()\
+            .limit(1)\
             .execute()
         
         if not comp.data:
             raise HTTPException(status_code=404, detail="Código inválido")
+
+        comp_data = comp.data[0]
         
         lista_orig = db.supabase.table('lista_compra')\
             .select('*, lista_item(*)')\
-            .eq('id_lista', comp.data['id_lista'])\
-            .maybe_single()\
+            .eq('id_lista', comp_data['id_lista'])\
+            .limit(1)\
             .execute()
         
         if not lista_orig.data:
             raise HTTPException(status_code=404, detail="Lista no encontrada")
+
+        lista_orig_data = lista_orig.data[0]
         
         # Crear nueva lista
         now = datetime.now().isoformat()
         nueva = db.supabase.table('lista_compra').insert({
             "user_id": db.current_user["id"],
-            "nombre_lista": lista_orig.data['nombre_lista'] + " (copia)",
+            "nombre_lista": lista_orig_data['nombre_lista'] + " (copia)",
             "fecha_creacion": now,
             "fecha_modificacion": now,
             "activa": True
@@ -1845,7 +1887,7 @@ def copiar_lista_compartida(
         nueva_id = nueva.data[0]['id_lista']
         
         # Copiar items
-        for item in lista_orig.data.get('lista_item', []):
+        for item in lista_orig_data.get('lista_item', []):
             db.supabase.table('lista_item').insert({
                 "id_lista": nueva_id,
                 "nombre_item": item['nombre_item'],
@@ -2087,11 +2129,13 @@ def register_comercio_user(
         .select("id_comer, nombre_comer") \
         .eq("id_comer", id_comer) \
         .eq("activo_comer", True) \
-        .maybe_single() \
+        .limit(1) \
         .execute()
 
     if not comercio_res.data:
         raise HTTPException(status_code=404, detail="El comercio seleccionado no existe o no está activo")
+
+    nombre_comer = comercio_res.data[0]['nombre_comer']
 
     # Verificar que ese comercio no tenga ya un dueño verificado
     existente = db.supabase.table("users") \
@@ -2119,7 +2163,7 @@ def register_comercio_user(
         raise HTTPException(status_code=500, detail=f"Usuario creado pero error al vincular comercio: {str(e)}")
 
     return {
-        "message": f"Registro recibido. Tu acceso para '{comercio_res.data['nombre_comer']}' está pendiente de aprobación.",
+        "message": f"Registro recibido. Tu acceso para '{nombre_comer}' está pendiente de aprobación.",
         "user": user_data
     }
 
@@ -2136,7 +2180,7 @@ def listar_comercios_pendientes(
 
     try:
         res = db.supabase.table("users") \
-            .select("id_user, email_user, nombre_completo_user, telefono_user, fecha_registro_user, id_comer, comercio(nombre_comer, direccion_comer)") \
+            .select("id_user, email_user, nombre_completo_user, telefono_user, fecha_registro_user, id_comer, comercio!users_id_comer_fkey(nombre_comer, direccion_comer)") \
             .eq("es_comercio_user", True) \
             .eq("comercio_verificado_user", False) \
             .order("fecha_registro_user", desc=True) \
@@ -2215,18 +2259,20 @@ def mi_estado_comercio(
 
     try:
         res = db.supabase.table("users") \
-            .select("es_comercio_user, comercio_verificado_user, motivo_rechazo_comercio, id_comer, comercio(id_comer, nombre_comer, logo_comer)") \
+            .select("es_comercio_user, comercio_verificado_user, motivo_rechazo_comercio, id_comer, comercio!users_id_comer_fkey(id_comer, nombre_comer, logo_comer)") \
             .eq("id_user", db.current_user["id"]) \
-            .maybe_single() \
+            .limit(1) \
             .execute()
 
         if not res.data:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-        return res.data
+        return res.data[0]
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2303,22 +2349,18 @@ def register_comercio_google(
             .select("id_comer, nombre_comer") \
             .eq("id_comer", id_comer) \
             .eq("activo_comer", True) \
-            .maybe_single() \
+            .limit(1) \
             .execute()
 
         if not comercio_res.data:
             raise HTTPException(status_code=404, detail="El comercio seleccionado no existe o no está activo")
 
-        # Verificar que ese comercio no tenga ya un dueño verificado
-        existente = db.supabase.table("users") \
-            .select("id_user") \
-            .eq("id_comer", id_comer) \
-            .eq("comercio_verificado_user", True) \
-            .execute()
-        if existente.data:
-            raise HTTPException(status_code=400, detail="Este comercio ya tiene un usuario verificado asignado")
+        nombre_comer = comercio_res.data[0]['nombre_comer']
 
         # Verificar el token con Supabase para obtener el id real del usuario
+        # OJO: esto debe ir ANTES de chequear si el comercio ya tiene dueño verificado,
+        # porque si no, el dueño legítimo re-logueándose se bloquea a sí mismo
+        # (ver "este comercio ya tiene un usuario verificado asignado" — bug recurrente).
         try:
             user_resp = db.supabase.auth.get_user(access_token)
             supabase_user_id = user_resp.user.id
@@ -2335,6 +2377,15 @@ def register_comercio_google(
         if not supabase_user_id:
             raise HTTPException(status_code=401, detail="No se pudo verificar la identidad de Google")
 
+        # Verificar que ese comercio no tenga ya un dueño verificado QUE NO SEA este mismo usuario
+        existente = db.supabase.table("users") \
+            .select("id_user") \
+            .eq("id_comer", id_comer) \
+            .eq("comercio_verificado_user", True) \
+            .execute()
+        if existente.data and any(u["id_user"] != supabase_user_id for u in existente.data):
+            raise HTTPException(status_code=400, detail="Este comercio ya tiene un usuario verificado asignado")
+
         # Buscar si ya existe en la tabla users
         existing_user = db.supabase.table("users") \
             .select("*") \
@@ -2342,10 +2393,29 @@ def register_comercio_google(
             .execute()
 
         if existing_user.data:
-            # Ya existía (por ejemplo, ya era usuario normal) — lo convertimos a comercio pendiente
-            # Mantenemos el nombre que ya tenía en la BD, no lo pisamos con el de Google
             user_data = existing_user.data[0]
             nombre_final = user_data.get("nombre_completo_user") or user_nombre
+            ya_verificado_aqui = (
+                user_data.get("id_comer") == id_comer
+                and user_data.get("comercio_verificado_user") is True
+            )
+            if ya_verificado_aqui:
+                # Es el dueño legítimo re-logueándose: no lo degradamos a pendiente otra vez
+                return {
+                    "message": f"Ya tenés acceso verificado a '{nombre_comer}'.",
+                    "user": {
+                        "id": supabase_user_id,
+                        "email": user_email,
+                        "nombre_completo": nombre_final,
+                        "rol": "comercio",
+                        "es_comercio_user": True,
+                        "comercio_verificado_user": True,
+                        "id_comer": id_comer,
+                        "access_token": access_token
+                    }
+                }
+            # Ya existía (por ejemplo, ya era usuario normal) — lo convertimos a comercio pendiente
+            # Mantenemos el nombre que ya tenía en la BD, no lo pisamos con el de Google
             db.supabase.table("users").update({
                 "es_comercio_user": True,
                 "comercio_verificado_user": False,
@@ -2362,7 +2432,6 @@ def register_comercio_google(
                 "es_comercio_user": True,
                 "comercio_verificado_user": False,
                 "id_comer": id_comer,
-                "comercio_oauth": "google",
                 "activo_user": True,
             }
             result = db.supabase.table("users").insert(new_user).execute()
@@ -2370,7 +2439,7 @@ def register_comercio_google(
             nombre_final = user_nombre
 
         return {
-            "message": f"Registro recibido. Tu acceso para '{comercio_res.data['nombre_comer']}' está pendiente de aprobación.",
+            "message": f"Registro recibido. Tu acceso para '{nombre_comer}' está pendiente de aprobación.",
             "user": {
                 "id": supabase_user_id,
                 "email": user_email,

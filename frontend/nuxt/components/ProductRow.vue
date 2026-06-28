@@ -48,6 +48,9 @@
       <div class="row-bottom">
         <span class="row-precio">${{ formatPrice(product.precio_prod) }}</span>
         <span v-if="product.cantidad_prod" class="row-unidad">{{ product.cantidad_prod }} {{ product.unidad_prod }}</span>
+        <span v-if="product.precio_por_unidad" class="row-precio-unidad">
+          (${{ formatPrice(product.precio_por_unidad) }}/{{ product.unidad_base_precio }})
+        </span>
 
         <!-- ✅ FECHA -->
         <span v-if="product.fecha_prod" class="row-fecha">
@@ -253,6 +256,12 @@ function onImageError(e: Event) {
 .row-unidad {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.row-precio-unidad {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .competencia-indicador {

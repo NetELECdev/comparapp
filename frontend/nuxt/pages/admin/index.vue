@@ -493,6 +493,11 @@
                 <span class="form-hint">Unidad del envase (no de la unidad mínima)</span>
               </div>
               <div class="form-group full">
+                <label>Código de barras (EAN)</label>
+                <input v-model="formProducto.ean_prod" type="text" placeholder="Ej: 7791234567890" inputmode="numeric" />
+                <span class="form-hint">Opcional. Permite identificar el mismo producto exacto entre comercios.</span>
+              </div>
+              <div class="form-group full">
                 <label>Comercio *</label>
                 <select v-model="formProducto.comercio_prod" required>
                   <option value="">Seleccionar...</option>
@@ -635,6 +640,7 @@ interface Producto {
   marca_prod: string
   imagen_prod: string | null
   precio_prod: string
+  ean_prod?: string | null
 }
 
 interface Comercio {
@@ -966,7 +972,7 @@ const nuevaCategoria = ref('')
 const formProducto = ref<Partial<Producto>>({
   nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
   cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
-  describe_prod: '', imagen_prod: '', activo_prod: true
+  describe_prod: '', imagen_prod: '', activo_prod: true, ean_prod: ''
 })
 
 function openModal(type: string) {
@@ -975,7 +981,7 @@ function openModal(type: string) {
     formProducto.value = {
       nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
       cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
-      describe_prod: '', imagen_prod: '', activo_prod: true
+      describe_prod: '', imagen_prod: '', activo_prod: true, ean_prod: ''
     }
     modalProductoOpen.value = true
   } else if (type === 'comercio') {
@@ -1009,6 +1015,7 @@ async function saveProducto() {
       describe_prod: formProducto.value.describe_prod?.trim() || null,
       imagen_prod: formProducto.value.imagen_prod?.trim() || null,
       activo_prod: !!formProducto.value.activo_prod,
+      ean_prod: formProducto.value.ean_prod?.trim() || null,
     }
     if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.comercio_prod) {
       showToast('Completá todos los campos requeridos (*)', 'error')

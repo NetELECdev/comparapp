@@ -20,8 +20,7 @@ export default defineNuxtConfig({
   css: [
     '~/assets/css/glass.css',
     '~/assets/css/tokens.css',
-    '~/assets/css/components.css',
-    '~/assets/css/animations.css'
+    '~/assets/css/components.css'
   ],
   runtimeConfig: {
     public: {

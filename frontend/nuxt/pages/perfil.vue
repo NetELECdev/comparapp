@@ -85,6 +85,15 @@
         </div>
       </div>
 
+      <!-- Ayuda y datos de la empresa -->
+      <button class="perfil-link-card glass-card" @click="navigateTo('/ayuda')">
+        <div class="perfil-link-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+        </div>
+        <span class="perfil-link-label">Ayuda y datos de la empresa</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="perfil-link-arrow"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+
     </div>
 
     <!-- Bottom nav -->
@@ -315,6 +324,19 @@ function showComingSoon() {
 .info-label { color: var(--text-muted); }
 .info-val { color: var(--text-primary); font-weight: 500; }
 .info-google { display: flex; align-items: center; gap: 5px; }
+
+/* Link a Ayuda y datos de la empresa */
+.perfil-link-card {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.perfil-link-card:hover { border-color: var(--border-glow); background: var(--bg-card-hover); }
+.perfil-link-icon { color: var(--accent-gold); display: flex; flex-shrink: 0; }
+.perfil-link-label { flex: 1; text-align: left; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.perfil-link-arrow { color: var(--text-muted); flex-shrink: 0; }
 
 /* Bottom nav — igual que el dashboard */
 .bottom-nav {

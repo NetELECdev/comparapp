@@ -4,7 +4,7 @@
       <!-- HEADER -->
       <header class="page-header animate-fade-in-up">
         <div class="header-left">
-          <button class="back-btn" @click="navigateTo('/productos')" aria-label="Volver">
+          <button class="back-btn" @click="volver" aria-label="Volver">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m15 18-6-6 6-6"/>
             </svg>
@@ -432,7 +432,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, navigateTo, useRuntimeConfig } from '#app'
+import { useRoute, useRouter, navigateTo, useRuntimeConfig } from '#app'
 
 // ─── Interfaces ───────────────────────────────────────────────
 
@@ -493,7 +493,18 @@ interface SameNameResponse {
 // ─── Estado ───────────────────────────────────────────────────
 
 const route = useRoute()
+const router = useRouter()
 const config = useRuntimeConfig()
+
+// Vuelve al origen real (dashboard, búsqueda con resultados, categoría, etc.)
+// en vez de un destino fijo — así no se pierde el contexto del usuario.
+function volver() {
+  if (window.history.length > 2) {
+    router.back()
+  } else {
+    navigateTo('/productos')
+  }
+}
 
 const loading = ref(true)
 const loadingHistorial = ref(false)
@@ -820,6 +831,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 1.25rem;
   padding-bottom: 2.5rem;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 @keyframes fadeInUp {
@@ -864,6 +877,8 @@ onMounted(async () => {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   padding: 1.5rem; position: relative; overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .detalle-card::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
@@ -884,7 +899,7 @@ onMounted(async () => {
 .detalle-img img { width: 100%; height: 100%; object-fit: contain; padding: 1rem; }
 
 /* ─── INFO ─── */
-.detalle-info { display: flex; flex-direction: column; gap: 0.375rem; }
+.detalle-info { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
 .detalle-categoria {
   display: inline-flex; align-self: flex-start; padding: 0.25rem 0.75rem;
   background: var(--accent-gold-dim); border: 1px solid rgba(232,196,160,0.2);
@@ -1311,6 +1326,12 @@ onMounted(async () => {
   .historial-link-btn { font-size: 0.68rem; padding: 0.3rem 0.6rem; }
   .same-name-stats { gap: 0.5rem; }
   .detalle-img { max-width: 200px; max-height: 180px; }
+}
+
+@media (max-width: 360px) {
+  .detalle-precio { font-size: 1.35rem; }
+  .detalle-precio-wrap { gap: 0.5rem; }
+  .variacion-badge { font-size: 0.65rem; padding: 0.15rem 0.45rem; }
 }
 /* ─── MODAL BASE ─── */
 .modal-overlay {

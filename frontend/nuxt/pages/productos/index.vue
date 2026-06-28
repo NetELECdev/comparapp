@@ -32,7 +32,7 @@
 
       <!-- BARRA DE BÚSQUEDA -->
       <div class="search-wrapper animate-fade-in-up stagger-1">
-        <div class="search-bar" :class="{ 'search-focused': searchFocused, 'search-has-value': searchQuery.length > 0 }">
+        <div class="search-bar" :class="{ 'search-focused': searchFocused, 'search-has-value': searchQueryTrim.length > 0 }">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"/>
             <path d="m21 21-4.3-4.3"/>
@@ -61,10 +61,10 @@
       <!-- RESULTADOS -->
       <div class="results-header animate-fade-in-up stagger-2">
         <div class="results-count">
-          <span v-if="searchQuery.length >= minChars">
+          <span v-if="searchQueryTrim.length >= minChars">
             {{ productos.length }} resultado{{ productos.length !== 1 ? 's' : '' }} para "{{ searchQuery }}"
           </span>
-          <span v-else-if="searchQuery.length > 0">
+          <span v-else-if="searchQueryTrim.length > 0">
             Escribí al menos {{ minChars }} caracteres...
           </span>
           <span v-else>
@@ -111,7 +111,7 @@
       </div>
 
       <!-- GRUPOS POR NOMBRE (búsqueda activa) -->
-      <template v-else-if="searchQuery.length >= minChars && productosAgrupadosPorNombre && Object.keys(productosAgrupadosPorNombre).length > 0">
+      <template v-else-if="searchQueryTrim.length >= minChars && productosAgrupadosPorNombre && Object.keys(productosAgrupadosPorNombre).length > 0">
         <div
           v-for="(grupo, nombre) in productosAgrupadosPorNombre"
           :key="nombre"
@@ -172,9 +172,9 @@
           </svg>
         </div>
         <h3>No se encontraron productos</h3>
-        <p v-if="searchQuery.length >= minChars">Intentá con otro término de búsqueda</p>
+        <p v-if="searchQueryTrim.length >= minChars">Intentá con otro término de búsqueda</p>
         <p v-else>No hay productos disponibles</p>
-        <button v-if="searchQuery.length >= minChars" class="back-btn-text" @click="clearSearch">Ver todos los productos</button>
+        <button v-if="searchQueryTrim.length >= minChars" class="back-btn-text" @click="clearSearch">Ver todos los productos</button>
       </div>
     </main>
 
@@ -218,7 +218,7 @@ interface Producto {
   precio_prod: number | string
   cate_prod: string
   imagen_prod: string | null
-  provee_prod: string
+  comercio_prod: string
   fecha_prod?: string
   activo_prod: boolean
   describe_prod?: string
@@ -230,6 +230,8 @@ interface Producto {
   precio_max_grupo?: number
   cantidad_prod?: number
   unidad_prod?: string
+  precio_por_unidad?: number | null
+  unidad_base_precio?: string | null
 }
 
 interface ComparacionItem extends Producto {
@@ -246,6 +248,7 @@ const productos = ref<Producto[]>([])
 const comparacion = ref<ComparacionItem[]>([])
 const sortBy = ref('nombre')
 const searchQuery = ref('')
+const searchQueryTrim = computed(() => searchQuery.value.trim())
 const searchFocused = ref(false)
 const searchInputRef = ref<HTMLInputElement>()
 
@@ -262,7 +265,7 @@ const sortOptions = [
   { label: 'Precio ↓', value: 'precio_asc' },
   { label: 'Precio ↑', value: 'precio_desc' },
   { label: 'Fecha', value: 'fecha' },
-  { label: 'Proveedor', value: 'proveedor' },
+  { label: 'Comercio', value: 'comercio' },
   { label: 'Categoría', value: 'categoria' },
   { label: 'Marca', value: 'marca' },
 ]
@@ -337,8 +340,8 @@ const productosOrdenados = computed(() => {
         const dateB = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
         return dateB - dateA
       })
-    case 'proveedor':
-      return list.sort((a, b) => a.provee_prod.localeCompare(b.provee_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
+    case 'comercio':
+      return list.sort((a, b) => a.comercio_prod.localeCompare(b.comercio_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     case 'categoria':
       return list.sort((a, b) => a.cate_prod.localeCompare(b.cate_prod, 'es') || a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     case 'marca':
@@ -359,11 +362,12 @@ let debounceTimer: ReturnType<typeof setTimeout>
 
 watch(searchQuery, (newVal) => {
   clearTimeout(debounceTimer)
-  if (newVal.length >= minChars) {
+  const trimmed = newVal.trim()
+  if (trimmed.length >= minChars) {
     debounceTimer = setTimeout(() => {
       // Guard: verify query hasn't changed by the time timer fires
-      if (searchQuery.value === newVal) {
-        fetchSearchResults(newVal)
+      if (searchQuery.value.trim() === trimmed) {
+        fetchSearchResults(trimmed)
       }
     }, DEBOUNCE_MS)
   } else {
@@ -472,7 +476,6 @@ function formatPrice(price: string | number | null | undefined): string {
 }
 
 async function irADetalle(id: string) {
-  console.log('Navegando a detalle:', id)
   await navigateTo(`/productos/${id}`)
 }
 
@@ -548,8 +551,10 @@ onMounted(async () => {
   flex-direction: column;
   gap: 1.25rem;
   max-width: 600px;
+  width: 100%;
   margin: 0 auto;
   padding-bottom: 6rem;
+  box-sizing: border-box;
 }
 
 @keyframes fadeInUp {

@@ -1,7 +1,6 @@
 <template>
   <div class="ofertas-page">
-    <div class="bg-gradient" />
-    <div class="bg-noise" />
+    <DynamicBackground />
 
     <main class="page-content">
       <!-- HEADER -->
@@ -139,34 +138,13 @@ function calcularDescuento(normal, oferta) {
 </script>
 
 <style scoped>
+/* Sin tokens locales — usa las variables globales del tema (--bg-card, --text-primary, etc.) */
 .ofertas-page {
-  --bg-deep: #0a0a0f;
-  --bg-card: rgba(255, 255, 255, 0.03);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --text-primary: #f5f0eb;
-  --text-secondary: rgba(245, 240, 235, 0.6);
-  --accent-gold: #e8c4a0;
   --accent-fire: #fb923c;
-
   position: relative;
   min-height: 100vh;
-  background: var(--bg-deep);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
-}
-
-.bg-gradient {
-  position: fixed; inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(251, 146, 60, 0.08), transparent),
-              radial-gradient(ellipse 60% 40% at 80% 80%, rgba(232, 196, 160, 0.05), transparent),
-              linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 100%);
-  z-index: 0;
-}
-
-.bg-noise {
-  position: fixed; inset: 0; opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  z-index: 1; pointer-events: none;
 }
 
 .page-content {

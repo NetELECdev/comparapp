@@ -97,7 +97,7 @@ import { navigateTo } from '#app'
 // resuelve como módulos en build time
 // ============================================
 const logoSrc = '/images/favicon.ico'
-const videoSrc = '/videos/Intro26.mp4'
+const videoSrc = 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/Intro2.mp4'
 
 // PASOS: 1=Logo | 2=Video cargando | 3=Video reproduciendo | 4=Fallback
 const step = ref(1)

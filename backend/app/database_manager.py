@@ -1,6 +1,7 @@
 # compara/database/database_manager.py
 
 import os
+from collections import defaultdict
 from typing import Tuple, List, Dict, Optional
 
 from datetime import datetime
@@ -299,7 +300,11 @@ class DatabaseManager:
         return True
 
     def is_user_logged_in(self) -> bool:
-        return self.current_user is not None and 'access_token' in self.current_user
+        # OJO: set_user_from_token() (usado en TODOS los endpoints de la API)
+        # construye current_user con la clave 'id', no 'access_token'.
+        # Antes este check pedía 'access_token' y nunca daba True via API,
+        # lo que rompía silenciosamente save_search_history/get_search_history.
+        return self.current_user is not None and bool(self.current_user.get('id'))
 
     def set_current_user(self, user_data):
         self.current_user = user_data
@@ -783,6 +788,38 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"Error searching by date: {e}")
+            return []
+
+    def get_productos_destacados(self, limit: int = 10) -> List[Dict]:
+        """
+        Proxy de 'productos más buscados' mientras no haya tracking real de
+        búsquedas generales acumulado. Define 'destacado' como: producto con
+        más comercios distintos vendiéndolo (más competencia = más relevante
+        para comparar), devolviendo el más barato de cada grupo como
+        representante. Se puede reemplazar por una agregación real sobre
+        search_history el día que haya suficiente volumen.
+        """
+        try:
+            response = self.supabase.table('producto').select('*').eq('activo_prod', True).execute()
+            productos = response.data or []
+
+            grupos: Dict[str, List[Dict]] = defaultdict(list)
+            for p in productos:
+                grupos[p['nombre_prod']].append(p)
+
+            destacados = []
+            for nombre, grupo in grupos.items():
+                if len(grupo) < 2:
+                    continue
+                representante = min(grupo, key=lambda x: float(x.get('precio_prod') or 0))
+                representante = dict(representante)
+                representante['total_comercios'] = len(grupo)
+                destacados.append(representante)
+
+            destacados.sort(key=lambda x: x['total_comercios'], reverse=True)
+            return destacados[:limit]
+        except Exception as e:
+            print(f"Error obteniendo productos destacados: {e}")
             return []
 
     def get_search_history(self, search_type: str = None, limit: int = 20) -> List[Dict]:

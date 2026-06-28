@@ -246,56 +246,64 @@
         </button>
       </section>
 
-      <!-- Productos recientes -->
-      <section class="recent-section" aria-label="Productos recientes">
-        <div class="recent-header">
-          <h2 class="recent-title">Productos recientes</h2>
-          <span v-if="products.length" class="recent-badge">{{ products.length }}</span>
+      <!-- Para vos: ofertas activas + productos destacados + tus búsquedas recientes, mezclados -->
+      <section class="paravos-section" aria-label="Para vos">
+        <h2 class="carousel-title">Para vos</h2>
+
+        <div v-if="loadingParaVos" class="paravos-carousel">
+          <div class="paravos-card-skeleton" v-for="n in 5" :key="n" aria-hidden="true" />
         </div>
 
-        <div v-if="loadingProducts" class="recent-skeletons">
-          <div class="recent-skeleton" v-for="n in 4" :key="n" aria-hidden="true" />
-        </div>
-
-        <div v-else-if="products.length === 0" class="recent-empty">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <div v-else-if="paraVosItems.length === 0" class="paravos-empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
           </svg>
-          <p>No hay productos cargados aún</p>
+          <p>Todavía no hay nada para mostrarte acá</p>
         </div>
 
-        <div v-else class="recent-list">
-          <article
-            v-for="p in products.slice(0, 5)"
-            :key="p.id_prod"
-            class="recent-item"
-            @click="navigateTo(`/productos/lista?q=${encodeURIComponent(p.nombre_prod)}`)"
+        <div v-else ref="paraVosCarouselRef" class="paravos-carousel">
+          <button
+            v-for="item in paraVosItems"
+            :key="`${item.tipo}-${item.id}`"
+            class="paravos-card"
+            :class="`paravos-card--${item.tipo}`"
+            @click="irAItemParaVos(item)"
           >
-            <div class="recent-item-img">
-              <img
-                :src="p.imagen_prod || '/images/avatar_default.png'"
-                :alt="p.nombre_prod"
-                loading="lazy"
-                @error="(e) => ((e.target as HTMLImageElement).src = '/images/avatar_default.png')"
-              />
-            </div>
-            <div class="recent-item-info">
-              <p class="recent-item-name">{{ p.nombre_prod }}</p>
-              <p class="recent-item-meta">{{ p.comercio_prod }} · {{ p.cate_prod }}</p>
-            </div>
-            <div class="recent-item-price">
-              <span class="price-symbol">$</span>
-              <span>{{ Number(p.precio_prod).toLocaleString('es-AR') }}</span>
-            </div>
-          </article>
-        </div>
+            <span v-if="item.tipo === 'oferta' && item.descuento_pct" class="paravos-badge">-{{ item.descuento_pct }}%</span>
 
-        <button v-if="products.length > 0" class="ver-mas" @click="navigateTo('/productos')">
-          Ver todos los productos
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-          </svg>
-        </button>
+            <template v-if="item.tipo === 'busqueda'">
+              <div class="paravos-search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+              </div>
+              <span class="paravos-name">{{ item.nombre }}</span>
+              <span class="paravos-meta">Búsqueda reciente</span>
+            </template>
+
+            <template v-else>
+              <div class="paravos-img">
+                <img
+                  :src="item.imagen || '/images/avatar_default.png'"
+                  :alt="item.nombre"
+                  loading="lazy"
+                  @error="(e) => ((e.target as HTMLImageElement).src = '/images/avatar_default.png')"
+                />
+              </div>
+              <span class="paravos-name">{{ item.nombre }}</span>
+              <span v-if="item.comercio" class="paravos-comercio">🏪 {{ item.comercio }}</span>
+              <span class="paravos-price">
+                <template v-if="item.tipo === 'oferta' && item.precioNormal">
+                  <span class="paravos-price-old">${{ Number(item.precioNormal).toLocaleString('es-AR') }}</span>
+                  <span class="paravos-price-new">${{ Number(item.precio).toLocaleString('es-AR') }}</span>
+                </template>
+                <template v-else>
+                  ${{ Number(item.precio).toLocaleString('es-AR') }}
+                </template>
+              </span>
+            </template>
+          </button>
+        </div>
       </section>
 
     </main>
@@ -312,22 +320,21 @@ useBackground()
 
 const { esDark } = useTema()
 
-interface Producto {
-  id_prod: string
-  nombre_prod: string
-  cate_prod: string
-  describe_prod: string
-  comercio_prod: string
-  precio_prod: string
-  imagen_prod: string | null
-  marca_prod: string
-  activo_prod: boolean
+interface ParaVosItem {
+  tipo: 'oferta' | 'destacado' | 'busqueda'
+  id: string
+  nombre: string
+  imagen?: string | null
+  comercio?: string | null
+  precio?: number
+  precioNormal?: number
+  descuento_pct?: number
 }
 
 const config = useRuntimeConfig()
 const user = ref<any>(null)
-const products = ref<Producto[]>([])
-const loadingProducts = ref(true)
+const paraVosItems = ref<ParaVosItem[]>([])
+const loadingParaVos = ref(true)
 
 // Mensajes de bienvenida rotativos
 const welcomeMessages = [
@@ -390,8 +397,10 @@ const SUPABASE = 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/pub
 // Drag-to-scroll en desktop para los carruseles horizontales
 const catCarouselRef = ref<HTMLElement | null>(null)
 const comCarouselRef = ref<HTMLElement | null>(null)
+const paraVosCarouselRef = ref<HTMLElement | null>(null)
 useDragScroll(catCarouselRef)
 useDragScroll(comCarouselRef)
+useDragScroll(paraVosCarouselRef)
 
 // Ubicación del usuario (geolocalización del navegador)
 const ubicacionTexto = ref('Detectar ubicación')
@@ -427,7 +436,13 @@ async function solicitarUbicacion() {
 const busquedaDash = ref('')
 function irABusqueda() {
   const q = busquedaDash.value.trim()
-  navigateTo(q ? `/productos/lista?q=${encodeURIComponent(q)}` : '/productos/lista')
+  // NOTA: /productos/lista no existe como ruta (404) — la página real es /productos
+  navigateTo(q ? `/productos?q=${encodeURIComponent(q)}` : '/productos')
+}
+
+// Click en una tarjeta de "Para vos" (oferta, destacado o búsqueda reciente)
+function irAItemParaVos(item: ParaVosItem) {
+  navigateTo(`/productos?q=${encodeURIComponent(item.nombre)}`)
 }
 
 // Estructura fiel al dashV1: imagen ilustrativa + título debajo
@@ -454,15 +469,72 @@ onMounted(async () => {
     menuItems.value = menuItems.value.filter(p => p.title !== 'Admin')
   }
 
+  // Cargar "Para vos": ofertas activas + productos destacados + búsquedas recientes, mezclados
   try {
-    const res = await $fetch<{ count: number; results: Producto[] }>(
-      `${config.public.apiBase}/products`
-    )
-    products.value = res.results || []
+    const token = getToken()
+    const [resOfertas, resDestacados, resBusquedas] = await Promise.all([
+      $fetch<{ results: any[] }>(`${config.public.apiBase}/ofertas?limit=6`)
+        .catch((err) => { console.error('🔴 Para vos — falló /ofertas:', err); return { results: [] } }),
+      $fetch<{ results: any[] }>(`${config.public.apiBase}/products/destacados?limit=6`)
+        .catch((err) => { console.error('🔴 Para vos — falló /products/destacados:', err); return { results: [] } }),
+      token
+        ? $fetch<{ results: any[] }>(`${config.public.apiBase}/search-history?limit=6`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }).catch((err) => { console.error('🔴 Para vos — falló /search-history:', err); return { results: [] } })
+        : Promise.resolve({ results: [] })
+    ])
+    console.log('🟢 Para vos — respuestas crudas:', { resOfertas, resDestacados, resBusquedas })
+
+    const ofertasItems: ParaVosItem[] = (resOfertas.results || []).map((o: any) => ({
+      tipo: 'oferta',
+      id: o.id || o.id_oferta || o.id_prod,
+      nombre: o.producto?.nombre_prod || 'Producto',
+      imagen: o.producto?.imagen_prod,
+      comercio: o.producto?.comercio_prod,
+      precio: o.precio_oferta,
+      precioNormal: o.precio_normal,
+      descuento_pct: o.descuento_pct
+    }))
+
+    const destacadosItems: ParaVosItem[] = (resDestacados.results || []).map((p: any) => ({
+      tipo: 'destacado',
+      id: p.id_prod,
+      nombre: p.nombre_prod,
+      imagen: p.imagen_prod,
+      comercio: p.comercio_prod,
+      precio: p.precio_prod
+    }))
+
+    const vistos = new Set<string>()
+    const busquedasItems: ParaVosItem[] = []
+    for (const h of (resBusquedas.results || [])) {
+      const term = h.search_term
+      if (!term || vistos.has(term)) continue
+      vistos.add(term)
+      busquedasItems.push({ tipo: 'busqueda', id: h.id, nombre: term })
+    }
+
+    // Mezcla round-robin entre los 3 tipos para que el carrusel quede mixto, no agrupado
+    const counts = { ofertas: ofertasItems.length, destacados: destacadosItems.length, busquedas: busquedasItems.length }
+    const listas = [ofertasItems, destacadosItems, busquedasItems]
+    const mezcla: ParaVosItem[] = []
+    let agregadoAlgo = true
+    while (agregadoAlgo) {
+      agregadoAlgo = false
+      for (const lista of listas) {
+        const siguiente = lista.shift()
+        if (siguiente) {
+          mezcla.push(siguiente)
+          agregadoAlgo = true
+        }
+      }
+    }
+    paraVosItems.value = mezcla
+    console.log(`🟢 Para vos — total final: ${mezcla.length} (ofertas:${counts.ofertas} destacados:${counts.destacados} búsquedas:${counts.busquedas})`)
   } catch (err) {
-    console.error('Error cargando productos:', err)
+    console.error('Error cargando Para vos:', err)
   } finally {
-    loadingProducts.value = false
+    loadingParaVos.value = false
   }
 
   // Cargar alertas activas (solo si hay sesión)
@@ -1098,102 +1170,130 @@ onMounted(async () => {
   text-align: center;
 }
 
-/* ── Sección productos recientes ── */
-.recent-section {
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-card);
-  display: flex; flex-direction: column; gap: 12px;
-}
-
-.recent-header { display: flex; align-items: center; gap: 8px; }
-.recent-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
-.recent-badge {
-  font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 20px;
-  background: var(--accent-gold-dim);
-  color: var(--accent-gold);
-  border: 1px solid var(--border-glow);
-}
-
-.recent-skeletons { display: flex; flex-direction: column; gap: 8px; }
-.recent-skeleton {
-  height: 60px; border-radius: var(--radius-sm);
-  background: var(--bg-card-hover);
-  animation: shimmer 1.4s ease-in-out infinite;
-}
+/* ── Para vos: carrusel mixto (ofertas + destacados + búsquedas recientes) ── */
 @keyframes shimmer {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.45; }
 }
 
-.recent-empty {
+.paravos-section { margin-top: 4px; }
+
+.paravos-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
+}
+.paravos-carousel::-webkit-scrollbar { display: none; }
+.paravos-carousel.is-dragging { cursor: grabbing; scroll-behavior: auto; }
+
+.paravos-empty {
   display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 2rem 0;
+  gap: 8px; padding: 1.5rem 0;
   color: var(--text-muted); font-size: 13px;
 }
 
-.recent-list { display: flex; flex-direction: column; gap: 6px; }
-
-.recent-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 10px;
-  background: var(--bg-input);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+/* Tamaño intermedio: más chica que una tarjeta de producto, más grande que el avatar de comercio */
+.paravos-card {
+  position: relative;
+  flex-shrink: 0;
+  width: 136px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 10px 12px;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
-  transition: background 0.18s, border-color 0.18s;
+  text-align: left;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.recent-item:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-subtle);
+.paravos-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-modal);
+  border-color: var(--border-glow);
+}
+.paravos-card:active { transform: scale(0.97); }
+
+.paravos-badge {
+  position: absolute; top: 8px; right: 8px;
+  padding: 2px 7px;
+  background: linear-gradient(135deg, var(--accent-rose), #dc2626);
+  color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: 7px;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.35);
+  z-index: 1;
 }
 
-.recent-item-img {
-  width: 44px; height: 44px;
-  border-radius: var(--radius-xs);
-  overflow: hidden; flex-shrink: 0;
+.paravos-img {
+  width: 100%; height: 76px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
   background: var(--bg-card-hover);
+  display: flex; align-items: center; justify-content: center;
 }
-.recent-item-img img {
+.paravos-img img {
   width: 100%; height: 100%; object-fit: cover;
 }
 
-.recent-item-info { flex: 1; min-width: 0; }
-.recent-item-name {
-  font-size: 13px; font-weight: 500;
-  color: var(--text-primary); margin: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.recent-item-meta {
-  font-size: 11px; color: var(--text-muted); margin: 2px 0 0;
-}
-
-.recent-item-price {
-  display: flex; align-items: baseline; gap: 1px;
-  color: var(--accent-emerald);
-  font-size: 14px; font-weight: 700;
-  white-space: nowrap; flex-shrink: 0;
-}
-.price-symbol { font-size: 11px; opacity: 0.8; }
-
-.ver-mas {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; padding: 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+.paravos-search-icon {
+  width: 100%; height: 76px;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 13px; font-weight: 500; cursor: pointer;
-  transition: all 0.2s ease;
+  background: var(--bg-input);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent-gold);
 }
-.ver-mas:hover {
+
+.paravos-name {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  width: 100%;
+}
+
+.paravos-comercio {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: 100%;
+}
+
+.paravos-meta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.paravos-price {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 13px; font-weight: 700;
+  color: var(--accent-emerald);
+  margin-top: 2px;
+}
+.paravos-price-old {
+  font-size: 10.5px; font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.paravos-price-new { color: var(--accent-emerald); }
+
+.paravos-card-skeleton {
+  flex-shrink: 0;
+  width: 136px; height: 172px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card-hover);
-  border-color: var(--border-glow);
-  color: var(--text-primary); gap: 10px;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 </style>

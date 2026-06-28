@@ -144,5 +144,46 @@ input[type="range"] {
   --app-shadow-glow:     0 0 20px rgba(232, 196, 160, 0.15);
   --app-bg-card:         var(--bg-card);
   --app-bg-input:        var(--bg-input);
-  --app-bg-deep:         var(--bg-deep);        
+  --app-bg-deep:         var(--bg-deep);
+
+  /* ── Agregadas: faltaban y se usan en components.css ── */
+
+  /* Fondos hover/focus que ya existen en tokens, solo sin alias */
+  --app-bg-card-hover:   var(--bg-card-hover);
+  --app-bg-input-focus:  var(--bg-input);
+
+  /* Colores de acento adicionales */
+  --app-blue:            var(--accent-blue);
+  --app-amber:           var(--accent-amber);
+  --app-emerald:         var(--accent-emerald);
+  --app-violet:          var(--accent-violet);
+  --app-rose:            var(--accent-rose);
+  --app-orange:          #fb923c;
+  --app-slate:           #94a3b8;
+  --app-green-price:     var(--accent-emerald);
+
+  /* Tipografía */
+  --app-font-family:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-text-xs:         0.75rem;
+  --app-text-sm:         0.875rem;
+  --app-text-base:       1rem;
+  --app-text-lg:         1.125rem;
+  --app-text-2xl:        1.5rem;
+
+  /* Espaciado */
+  --app-space-sm:        0.5rem;
+  --app-space-md:        1rem;
+  --app-space-lg:        1.5rem;
+  --app-space-xl:        2rem;
+
+  /* Transiciones */
+  --app-transition-fast: 0.15s ease;
+  --app-transition-base: 0.25s ease;
+  --app-transition-slow: 0.4s ease;
+
+  /* Sombras y radios adicionales */
+  --app-shadow-card:        var(--shadow-card);
+  --app-shadow-input-focus: 0 0 0 3px rgba(232, 196, 160, 0.1);
+  --app-radius-xl:          var(--radius-xl);
+  --app-radius-full:        9999px;
 }

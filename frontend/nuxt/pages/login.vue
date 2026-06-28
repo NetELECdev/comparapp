@@ -191,7 +191,6 @@ async function login() {
       }
 
       localStorage.setItem('comparapp_user', JSON.stringify(userData))
-      localStorage.setItem('comparapp_user', JSON.stringify(userData))
       console.log('Usuario guardado:', userData)
       await navigateTo('/dashboard')
     } else {
@@ -210,12 +209,13 @@ async function loginWithGoogle() {
   try {
     const { loginWithGoogle: oauthGoogle } = useSupabaseAuth()
     await oauthGoogle()
-    // Supabase redirige automáticamente a Google — si llegamos acá hubo error
-    error.value = 'No se pudo iniciar sesión con Google'
+    // Si llegamos hasta aquí sin excepción, el redirect a Google ya está en
+    // curso (signInWithOAuth dispara window.location internamente). No es
+    // un error — el navegador todavía no terminó de cambiar de página.
+    // Dejamos el botón en estado "Conectando..." sin mostrar ningún mensaje.
   } catch (err: any) {
-    error.value = 'Google OAuth no está configurado aún. Usá email y contraseña.'
+    error.value = 'No se pudo iniciar sesión con Google. Intentá de nuevo.'
     console.error('Google OAuth error:', err)
-  } finally {
     loadingGoogle.value = false
   }
 }
@@ -263,20 +263,17 @@ function handleError(err: any) {
 }
 
 /* ─── LOGIN WRAPPER — contenedor raíz transparente ─── */
-/* ← CAMBIO: reemplaza .app-page, sin fondo propio para dejar ver el fondo global de app.vue */
 .login-wrapper {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* Sin background — el fondo lo provee #app-background en app.vue */
 }
 
 /* ─── LOGIN CONTENT ─── */
 .login-content {
   position: relative;
-  /* ← CAMBIO: eliminado z-index: 2, no es necesario con #app-background en z-index: -1 */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
