@@ -25,6 +25,18 @@ class DatabaseManager:
         key = SupabaseConfig.get_service_key()
         self.supabase = create_client(url, key)
 
+        # Diagnóstico: confirmar qué rol tiene realmente la key cargada (sin loguear la key).
+        # Si esto imprime 'anon' en vez de 'service_role', el .env tiene SUPABASE_SERVICE_KEY
+        # mal puesta (o vacía) y por eso las subidas a Storage chocan con RLS.
+        try:
+            import base64 as _b64
+            payload_b64 = key.split('.')[1]
+            payload_b64 += '=' * (-len(payload_b64) % 4)
+            rol_key = json.loads(_b64.urlsafe_b64decode(payload_b64)).get('role', '?')
+            print(f"🔑 Supabase client iniciado con role: {rol_key}")
+        except Exception:
+            print("🔑 No se pudo decodificar el role de la key (revisar formato)")
+
 
 
     def _parse_wkb_point(self, wkb_hex: str) -> dict:
@@ -132,7 +144,8 @@ class DatabaseManager:
 
     # ==================== AUTENTICACIÓN ====================
 
-    def register_user(self, email: str, password: str, nombre_completo: str, telefono: Optional[str] = None):
+    def register_user(self, email: str, password: str, nombre_completo: str, telefono: Optional[str] = None,
+                       avatar_bytes: Optional[bytes] = None, avatar_ext: Optional[str] = None):
         if not self.supabase:
             return False, "Error: Base de datos no disponible", None
         
@@ -156,6 +169,20 @@ class DatabaseManager:
             
             # Usar el ID que generó Supabase Auth
             user_id = auth_response.user.id
+
+            # 1.5️⃣ SUBIR AVATAR SI EL USUARIO ELIGIÓ UNO (no bloquea el registro si falla)
+            avatar_url = None
+            if avatar_bytes and avatar_ext:
+                try:
+                    nombre_archivo = f"avatares/{user_id}.{avatar_ext}"
+                    self.supabase.storage.from_("product-images").upload(
+                        nombre_archivo,
+                        avatar_bytes,
+                        {"content-type": f"image/{avatar_ext}", "upsert": "true"}
+                    )
+                    avatar_url = self.supabase.storage.from_("product-images").get_public_url(nombre_archivo)
+                except Exception as e:
+                    print(f"⚠️ No se pudo subir el avatar (el registro continúa sin foto): {e}")
             
             # 2️⃣ INSERTAR EN TU TABLA users CON EL MISMO ID
             response = self.supabase.table("users").insert({
@@ -163,6 +190,7 @@ class DatabaseManager:
                 "email_user": email,
                 "nombre_completo_user": nombre_completo,
                 "telefono_user": telefono,
+                "avatar_url_user": avatar_url,
                 "fecha_registro_user": datetime.now().isoformat(),
                 "ultima_conexion_user": datetime.now().isoformat(),
                 "rol_user": "usuario",
@@ -182,7 +210,8 @@ class DatabaseManager:
                     "id_user": user_data.get("id_user"),
                     "email_user": user_data.get("email_user"),
                     "nombre_completo_user": user_data.get("nombre_completo_user"),
-                    "rol_user": user_data.get("rol_user")
+                    "rol_user": user_data.get("rol_user"),
+                    "avatar_url_user": user_data.get("avatar_url_user")
                 }
             else:
                 # Rollback: eliminar de Auth si falló la tabla
@@ -265,11 +294,16 @@ class DatabaseManager:
                 # Combinar con datos de tu tabla personalizada
                 if user_data_response.data:
                     custom_data = user_data_response.data[0]
+
+                    if custom_data.get("activo_user") is False:
+                        return False, "Tu cuenta fue desactivada. Contactá al administrador.", {}
+
                     user_data.update({
                         "id_user": custom_data.get("id_user"),
                         "nombre_completo_user": custom_data.get("nombre_completo_user"),
                         "rol_user": custom_data.get("rol_user", "usuario"),
                         "telefono_user": custom_data.get("telefono_user"),
+                        "avatar_url_user": custom_data.get("avatar_url_user"),
                         "activo_user": custom_data.get("activo_user", True),
                         "id_comer": custom_data.get("id_comer"),
                         "es_comercio_user": custom_data.get("es_comercio_user", False),
@@ -368,8 +402,16 @@ class DatabaseManager:
 
     def create_product(self, product_data: dict) -> Tuple[bool, str]:
         """
-        Crea un producto nuevo o actualiza el precio si ya existe
-        uno con nombre similar + mismo comercio.
+        Crea un producto nuevo. Siempre inserta una fila — no fusiona ni
+        actualiza productos existentes por nombre. La edición de un producto
+        ya tiene su propio camino (update_product / PUT /products/{id}),
+        usado tanto por el panel de comercio como por el admin. Antes esta
+        función buscaba un "duplicado" por nombre normalizado + comercio_prod
+        para decidir si actualizar en vez de insertar, pero comercio_prod es
+        un campo de texto libre (no una FK a comercio.id_comer), así que dos
+        comercios distintos que casualmente comparten el mismo nombre podían
+        pisarse el precio del producto del otro. Ahora cada alta es siempre
+        una fila nueva, sin importar el nombre.
 
         Permisos:
         - admin: puede crear productos para cualquier comercio
@@ -399,113 +441,39 @@ class DatabaseManager:
                 comer_res = self.supabase.table('comercio')\
                     .select('nombre_comer')\
                     .eq('id_comer', mi_id_comer)\
-                    .maybe_single()\
+                    .limit(1)\
                     .execute()
 
                 if not comer_res.data:
                     return False, "No se encontró tu comercio asignado"
 
-                nombre_mi_comercio = comer_res.data['nombre_comer']
+                nombre_mi_comercio = comer_res.data[0]['nombre_comer']
                 if comercio != nombre_mi_comercio:
                     return False, f"Solo podés cargar productos para tu comercio: {nombre_mi_comercio}"
-            
-            # Normalizar nombre para búsqueda de duplicados
-            nombre_normalizado = self._normalize_product_name(nombre)
-            
-            if not nombre_normalizado:
-                return False, "nombre_prod no válido después de normalizar"
-            
-            # Buscar TODOS los productos activos del mismo comercio
-            response = self.supabase.table('producto')\
-                .select('id_prod, nombre_prod, precio_prod, comercio_prod, fecha_prod, describe_prod, unidad_prod, cantidad_prod, marca_prod, imagen_prod, cate_id, cate_prod')\
-                .eq('comercio_prod', comercio)\
-                .eq('activo_prod', True)\
-                .execute()
-            
+
             ahora = datetime.now().isoformat()
-            
-            # Buscar coincidencia por nombre normalizado
-            producto_existente = None
-            for prod in (response.data or []):
-                if self._normalize_product_name(prod.get('nombre_prod', '')) == nombre_normalizado:
-                    producto_existente = prod
-                    break
-            
-            if producto_existente:
-                # CASO: Duplicado detectado → Actualizar
-                product_id = producto_existente['id_prod']
-                precio_anterior = producto_existente.get('precio_prod')
-                nombre_existente = producto_existente.get('nombre_prod', '')
-                
-                print(f"🔍 Duplicado detectado: '{nombre}' coincide con '{nombre_existente}'")
-                
-                # Guardar precio anterior en historial
-                if precio_anterior is not None and precio_anterior != nuevo_precio:
+
+            # Crear producto nuevo, siempre
+            product_data['fecha_prod'] = ahora
+            if 'activo_prod' not in product_data:
+                product_data['activo_prod'] = True
+
+            response = self.supabase.table('producto').insert(product_data).execute()
+
+            if response.data and len(response.data) > 0:
+                new_id = response.data[0]['id_prod']
+                if nuevo_precio is not None:
                     try:
                         self.supabase.table('historial_precios').insert({
-                            'id_prod': product_id,
-                            'precio': precio_anterior,
+                            'id_prod': new_id,
+                            'precio': nuevo_precio,
                             'fecha_registro': ahora
                         }).execute()
-                        print(f"💾 Precio histórico guardado: {precio_anterior} → {nuevo_precio}")
-                    except Exception as hist_err:
-                        print(f"⚠️ Error guardando historial: {hist_err}")
-                
-                # Quedarse con el nombre más largo/descriptivo
-                nombre_final = nombre_existente
-                if len(nombre.strip()) > len(nombre_existente.strip()):
-                    nombre_final = nombre.strip()
-                    print(f"📝 Nombre actualizado: '{nombre_existente}' → '{nombre_final}'")
-                
-                update_payload = {
-                    'precio_prod': nuevo_precio,
-                    'fecha_prod': ahora,
-                    'activo_prod': True,
-                    'nombre_prod': nombre_final
-                }
-                
-                # Campos opcionales: actualizar solo si son mejores
-                for campo in ['describe_prod', 'unidad_prod', 'cantidad_prod', 'marca_prod', 'imagen_prod', 'cate_id', 'cate_prod']:
-                    if campo in product_data and product_data[campo] is not None:
-                        valor_nuevo = product_data[campo]
-                        valor_existente = producto_existente.get(campo)
-                        if isinstance(valor_nuevo, str) and isinstance(valor_existente, str):
-                            if len(valor_nuevo.strip()) > len(valor_existente.strip()):
-                                update_payload[campo] = valor_nuevo
-                        else:
-                            update_payload[campo] = valor_nuevo
-                
-                response = self.supabase.table('producto')\
-                    .update(update_payload)\
-                    .eq('id_prod', product_id)\
-                    .execute()
-                
-                if response.data:
-                    return True, f"Producto actualizado (precio anterior: ${precio_anterior})"
-                return False, "Error al actualizar producto existente"
-            
-            else:
-                # CASO: Producto nuevo → Insertar
-                product_data['fecha_prod'] = ahora
-                if 'activo_prod' not in product_data:
-                    product_data['activo_prod'] = True
-                
-                response = self.supabase.table('producto').insert(product_data).execute()
-                
-                if response.data and len(response.data) > 0:
-                    new_id = response.data[0]['id_prod']
-                    if nuevo_precio is not None:
-                        try:
-                            self.supabase.table('historial_precios').insert({
-                                'id_prod': new_id,
-                                'precio': nuevo_precio,
-                                'fecha_registro': ahora
-                            }).execute()
-                        except Exception:
-                            pass
-                    return True, "Producto creado exitosamente"
-                return False, "Error al crear producto"
-                
+                    except Exception:
+                        pass
+                return True, "Producto creado exitosamente"
+            return False, "Error al crear producto"
+
         except Exception as e:
             print(f"❌ Error en create_product: {e}")
             return False, str(e)
@@ -566,9 +534,44 @@ class DatabaseManager:
             return False, str(e)
 
     def delete_product(self, product_id: str) -> Tuple[bool, str]:
-        if not self.is_admin():
+        rol = self.get_user_role()
+        if rol not in ('admin', 'comercio'):
             return False, "Permisos insuficientes"
+
         try:
+            if rol == 'comercio':
+                mi_id_comer = (self.current_user or {}).get('id_comer')
+                if not mi_id_comer:
+                    return False, "Tu cuenta de comercio no está vinculada correctamente."
+
+                comer_res = self.supabase.table('comercio')\
+                    .select('nombre_comer')\
+                    .eq('id_comer', mi_id_comer)\
+                    .limit(1)\
+                    .execute()
+                if not comer_res.data:
+                    return False, "No se encontró tu comercio asignado"
+                nombre_mi_comercio = comer_res.data[0]['nombre_comer']
+
+                prod_res = self.supabase.table('producto')\
+                    .select('comercio_prod')\
+                    .eq('id_prod', product_id)\
+                    .limit(1)\
+                    .execute()
+                if not prod_res.data:
+                    return False, "Producto no encontrado"
+                if prod_res.data[0].get('comercio_prod') != nombre_mi_comercio:
+                    return False, "Solo podés eliminar productos de tu propio comercio"
+
+                # Baja lógica: se desactiva, no se borra físicamente — conserva
+                # el historial de precios (historial_precios.id_prod) intacto.
+                response = self.supabase.table('producto')\
+                    .update({'activo_prod': False})\
+                    .eq('id_prod', product_id)\
+                    .execute()
+                return (True, "Producto eliminado") if response.data else (False, "No se pudo eliminar el producto")
+
+            # admin: borrado físico (comportamiento existente, sin cambios)
             response = self.supabase.table('producto').delete().eq('id_prod', product_id).execute()
             return (True, "Producto eliminado") if response.data else (False, "No se eliminó el producto")
         except Exception as e:

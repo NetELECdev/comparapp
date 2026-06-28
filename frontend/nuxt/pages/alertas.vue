@@ -11,24 +11,10 @@
           </svg>
         </button>
         <div class="header-center">
-          <h1 class="page-title">🔔 Alertas</h1>
-          <p class="page-subtitle">{{ alertasNoLeidas }} alerta{{ alertasNoLeidas !== 1 ? 's' : '' }} sin leer</p>
+          <h1 class="page-title">🔔 Alertas de precio</h1>
+          <p class="page-subtitle">{{ alertas.length }} alerta{{ alertas.length !== 1 ? 's' : '' }} activa{{ alertas.length !== 1 ? 's' : '' }}</p>
         </div>
       </header>
-
-      <!-- FILTROS -->
-      <div class="filter-chips animate-fade-in-up stagger-1">
-        <button
-          v-for="f in filtros"
-          :key="f.value"
-          class="filter-chip"
-          :class="{ active: filtroActivo === f.value }"
-          @click="filtroActivo = f.value"
-        >
-          {{ f.icon }} {{ f.label }}
-          <span class="chip-count">{{ contarPorTipo(f.value) }}</span>
-        </button>
-      </div>
 
       <!-- LOADING -->
       <div v-if="loading" class="state-box animate-fade-in-up">
@@ -38,61 +24,44 @@
 
       <template v-else>
         <!-- LISTA DE ALERTAS -->
-        <div v-if="alertasFiltradas.length > 0" class="alertas-lista animate-fade-in-up stagger-2">
+        <div v-if="alertas.length > 0" class="alertas-lista animate-fade-in-up stagger-2">
           <div
-            v-for="alerta in alertasFiltradas"
-            :key="alerta.id_alerta"
+            v-for="alerta in alertas"
+            :key="alerta.id"
             class="alerta-card"
-            :class="{ noleida: !alerta.leida }"
-            @click="marcarLeida(alerta)"
+            @click="alerta.id_prod && navigateTo(`/productos/${alerta.id_prod}`)"
           >
-            <!-- Icono tipo -->
-            <div class="alerta-icon" :class="alerta.tipo">
-              <span v-if="alerta.tipo === 'precio'">💰</span>
-              <span v-else-if="alerta.tipo === 'stock'">📦</span>
-              <span v-else-if="alerta.tipo === 'lista'">🛒</span>
-              <span v-else>🔔</span>
+            <!-- Imagen del producto -->
+            <div class="alerta-img">
+              <img
+                :src="alerta.producto?.imagen_prod || '/images/avatar_default.png'"
+                :alt="alerta.producto?.nombre_prod"
+                loading="lazy"
+                @error="(e) => ((e.target as HTMLImageElement).src = '/images/avatar_default.png')"
+              />
             </div>
 
             <!-- Info -->
             <div class="alerta-info">
-              <p class="alerta-titulo">{{ alerta.titulo }}</p>
-              <p class="alerta-desc">{{ alerta.descripcion }}</p>
+              <p class="alerta-titulo">{{ alerta.producto?.nombre_prod || 'Producto' }}</p>
+              <p v-if="alerta.producto?.comercio_prod" class="alerta-desc">🏪 {{ alerta.producto.comercio_prod }}</p>
+              <div class="alerta-precios">
+                <span class="alerta-precio-actual">${{ Number(alerta.producto?.precio_prod || 0).toLocaleString('es-AR') }}</span>
+                <span class="alerta-precio-flecha">→</span>
+                <span class="alerta-precio-objetivo">${{ Number(alerta.precio_objetivo).toLocaleString('es-AR') }}</span>
+              </div>
               <div class="alerta-meta">
-                <span class="alerta-fecha">{{ formatFecha(alerta.fecha_creacion) }}</span>
-                <span v-if="!alerta.leida" class="alerta-badge">Nueva</span>
+                <span class="alerta-fecha">Creada {{ formatFecha(alerta.fecha_creacion) }}</span>
+                <span v-if="alerta.notificada" class="alerta-badge">✅ Llegó al precio</span>
               </div>
             </div>
 
             <!-- Acciones -->
             <div class="alerta-actions">
               <button
-                v-if="alerta.tipo === 'precio' && alerta.id_prod"
-                class="alerta-action-btn"
-                title="Ver producto"
-                @click.stop="navigateTo(`/productos/${alerta.id_prod}`)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </button>
-              <button
-                v-if="alerta.id_lista"
-                class="alerta-action-btn"
-                title="Ver lista"
-                @click.stop="navigateTo(`/listas/${alerta.id_lista}`)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 11l3 3L22 4"/>
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-                </svg>
-              </button>
-              <button
                 class="alerta-delete-btn"
-                title="Eliminar"
-                @click.stop="eliminarAlerta(alerta.id_alerta)"
+                title="Eliminar alerta"
+                @click.stop="eliminarAlerta(alerta.id)"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
@@ -106,8 +75,7 @@
         <div v-else class="state-box animate-fade-in-up stagger-2">
           <div class="empty-icon">🔕</div>
           <h3>Sin alertas</h3>
-          <p v-if="filtroActivo === 'todas'">No tenés alertas configuradas</p>
-          <p v-else>No hay alertas de tipo {{ filtroActivo }}</p>
+          <p>Todavía no tenés alertas de precio configuradas. Creá una desde la página de un producto.</p>
         </div>
       </template>
     </main>
@@ -115,45 +83,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { navigateTo } from '#app'
 
 interface Alerta {
-  id_alerta: string
+  id: string
   user_id: string
-  tipo: 'precio' | 'stock' | 'lista' | 'sistema'
-  titulo: string
-  descripcion: string
-  id_prod?: string | null
-  id_lista?: string | null
-  leida: boolean
+  id_prod: string
+  precio_objetivo: number
+  activa: boolean
+  notificada: boolean
   fecha_creacion: string
+  producto?: {
+    nombre_prod: string
+    precio_prod: number
+    imagen_prod: string | null
+    comercio_prod: string
+  }
 }
 
 const { api } = useApi()
 
 const loading = ref(true)
 const alertas = ref<Alerta[]>([])
-const filtroActivo = ref('todas')
-
-const filtros = [
-  { value: 'todas', label: 'Todas', icon: '🔔' },
-  { value: 'precio', label: 'Precios', icon: '💰' },
-  { value: 'stock', label: 'Stock', icon: '📦' },
-  { value: 'lista', label: 'Listas', icon: '🛒' },
-]
-
-const alertasFiltradas = computed(() => {
-  if (filtroActivo.value === 'todas') return alertas.value
-  return alertas.value.filter(a => a.tipo === filtroActivo.value)
-})
-
-const alertasNoLeidas = computed(() => alertas.value.filter(a => !a.leida).length)
-
-function contarPorTipo(tipo: string) {
-  if (tipo === 'todas') return alertas.value.length
-  return alertas.value.filter(a => a.tipo === tipo).length
-}
 
 function formatFecha(fecha: string) {
   const d = new Date(fecha)
@@ -162,18 +114,18 @@ function formatFecha(fecha: string) {
   const min = Math.floor(diff / 60000)
   const hrs = Math.floor(diff / 3600000)
   const dias = Math.floor(diff / 86400000)
-  if (min < 1) return 'Ahora'
-  if (min < 60) return `Hace ${min} min`
-  if (hrs < 24) return `Hace ${hrs} h`
-  if (dias < 7) return `Hace ${dias} d`
+  if (min < 1) return 'ahora'
+  if (min < 60) return `hace ${min} min`
+  if (hrs < 24) return `hace ${hrs} h`
+  if (dias < 7) return `hace ${dias} d`
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
 async function cargar() {
   loading.value = true
   try {
-    const data = await api<{ alertas: Alerta[] }>('/alertas')
-    alertas.value = data.alertas || []
+    const data = await api<{ count: number; results: Alerta[] }>('/alertas')
+    alertas.value = data.results || []
   } catch (err) {
     console.error('Error cargando alertas:', err)
   } finally {
@@ -181,19 +133,13 @@ async function cargar() {
   }
 }
 
-async function marcarLeida(alerta: Alerta) {
-  if (alerta.leida) return
-  try {
-    await api(`/alertas/${alerta.id_alerta}/leer`, { method: 'POST' })
-    alerta.leida = true
-  } catch {}
-}
-
 async function eliminarAlerta(id: string) {
   try {
     await api(`/alertas/${id}`, { method: 'DELETE' })
-    alertas.value = alertas.value.filter(a => a.id_alerta !== id)
-  } catch {}
+    alertas.value = alertas.value.filter(a => a.id !== id)
+  } catch (err) {
+    console.error('Error eliminando alerta:', err)
+  }
 }
 
 onMounted(cargar)
@@ -229,25 +175,6 @@ onMounted(cargar)
 .page-title { font-size:1.4rem; font-weight:700; margin:0; letter-spacing:-0.02em; }
 .page-subtitle { color:var(--text-secondary); font-size:0.82rem; margin:0.25rem 0 0; }
 
-/* FILTROS */
-.filter-chips { display:flex; gap:0.5rem; flex-wrap:wrap; }
-.filter-chip {
-  display:flex; align-items:center; gap:0.375rem;
-  padding:0.375rem 0.75rem; border-radius:999px;
-  border:1px solid var(--border-subtle);
-  background:rgba(255,255,255,0.02);
-  color:var(--text-secondary); font-size:0.78rem; font-weight:500;
-  cursor:pointer; transition:all 0.2s;
-}
-.filter-chip.active {
-  background:rgba(232,196,160,0.12); border-color:rgba(232,196,160,0.3);
-  color:var(--accent-gold);
-}
-.chip-count {
-  background:rgba(255,255,255,0.08); border-radius:999px;
-  padding:0.1rem 0.4rem; font-size:0.7rem;
-}
-
 /* ALERTAS LISTA */
 .alertas-lista { display:flex; flex-direction:column; gap:0.5rem; }
 .alerta-card {
@@ -258,29 +185,29 @@ onMounted(cargar)
   cursor:pointer;
 }
 .alerta-card:hover { background:var(--bg-card-hover); border-color:rgba(255,255,255,0.12); }
-.alerta-card.noleida {
-  background:rgba(232,196,160,0.04);
-  border-left:3px solid var(--accent-gold);
-}
 
-.alerta-icon {
-  width:40px; height:40px; border-radius:var(--radius-sm); flex-shrink:0;
+.alerta-img {
+  width:48px; height:48px; border-radius:var(--radius-sm); flex-shrink:0;
+  overflow:hidden; background:var(--bg-input);
   display:flex; align-items:center; justify-content:center;
-  font-size:1.2rem; background:rgba(255,255,255,0.04);
-  border:1px solid var(--border-subtle);
 }
-.alerta-icon.precio { background:rgba(52,211,153,0.08); border-color:rgba(52,211,153,0.2); }
-.alerta-icon.stock { background:rgba(96,165,250,0.08); border-color:rgba(96,165,250,0.2); }
-.alerta-icon.lista { background:rgba(232,196,160,0.08); border-color:rgba(232,196,160,0.2); }
+.alerta-img img { width:100%; height:100%; object-fit:cover; }
 
 .alerta-info { flex:1; min-width:0; }
 .alerta-titulo { color:var(--text-primary); font-size:0.9rem; font-weight:600; margin:0; }
-.alerta-desc { color:var(--text-secondary); font-size:0.8rem; margin:0.2rem 0 0; line-height:1.4; }
-.alerta-meta { display:flex; align-items:center; gap:0.5rem; margin-top:0.4rem; }
+.alerta-desc { color:var(--text-secondary); font-size:0.78rem; margin:0.2rem 0 0; }
+.alerta-precios {
+  display:flex; align-items:center; gap:6px;
+  margin-top:0.4rem; font-size:0.85rem; font-weight:600;
+}
+.alerta-precio-actual { color:var(--text-muted); text-decoration:line-through; font-weight:500; }
+.alerta-precio-flecha { color:var(--text-muted); font-size:0.75rem; }
+.alerta-precio-objetivo { color:var(--accent-emerald); }
+.alerta-meta { display:flex; align-items:center; gap:0.5rem; margin-top:0.4rem; flex-wrap: wrap; }
 .alerta-fecha { color:var(--text-muted); font-size:0.72rem; }
 .alerta-badge {
-  background:var(--accent-gold); color:#1a1a1a;
-  font-size:0.65rem; font-weight:700; text-transform:uppercase;
+  background:var(--accent-emerald); color:#0a0a0a;
+  font-size:0.65rem; font-weight:700;
   padding:0.15rem 0.4rem; border-radius:4px;
 }
 
@@ -289,14 +216,13 @@ onMounted(cargar)
   opacity:0; transition:opacity 0.2s;
 }
 .alerta-card:hover .alerta-actions { opacity:1; }
-.alerta-action-btn, .alerta-delete-btn {
+.alerta-delete-btn {
   width:28px; height:28px; border-radius:6px;
   display:flex; align-items:center; justify-content:center;
   background:transparent; border:1px solid var(--border-subtle);
   color:var(--text-muted); cursor:pointer; transition:all 0.2s;
 }
-.alerta-action-btn:hover { background:rgba(232,196,160,0.1); color:var(--accent-gold); border-color:rgba(232,196,160,0.3); }
-.alerta-delete-btn:hover { background:rgba(251,113,133,0.1); color:var(--accent-error); border-color:rgba(251,113,133,0.3); }
+.alerta-delete-btn:hover { background:rgba(251,113,133,0.1); color:var(--accent-rose); border-color:rgba(251,113,133,0.3); }
 
 /* STATES */
 .state-box {

@@ -22,6 +22,26 @@
 
       <!-- FORMULARIO -->
       <form @submit.prevent="register" class="login-form animate-fade-in-up stagger-2">
+        <div class="avatar-picker">
+          <button type="button" class="avatar-picker-btn" @click="avatarInput?.click()">
+            <img v-if="avatarPreview" :src="avatarPreview" alt="" class="avatar-picker-img" />
+            <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span class="avatar-picker-badge">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+          </button>
+          <input
+            ref="avatarInput"
+            type="file"
+            accept="image/png, image/jpeg, image/webp"
+            class="avatar-picker-input"
+            @change="onAvatarSelected"
+          />
+          <span class="avatar-picker-label">{{ avatarPreview ? 'Cambiar foto' : 'Foto de perfil (opcional)' }}</span>
+        </div>
+
         <div class="field">
           <label class="field-label">Nombre completo</label>
           <div class="field-input-wrap">
@@ -162,6 +182,25 @@ const loading = ref(false)
 const loadingGoogle = ref(false)
 const showFallback = ref(false)
 
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarFile = ref<File | null>(null)
+const avatarPreview = ref<string | null>(null)
+
+function onAvatarSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    error.value = 'La foto debe ser PNG, JPG o WEBP'
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    error.value = 'La foto no puede pesar más de 5 MB'
+    return
+  }
+  avatarFile.value = file
+  avatarPreview.value = URL.createObjectURL(file)
+}
+
 const passwordsMatch = computed(() => password.value === passwordConfirm.value && password.value.length >= 8)
 
 async function register() {
@@ -180,14 +219,17 @@ async function register() {
   loading.value = true
 
   try {
+    const formData = new FormData()
+    formData.append('email', email.value)
+    formData.append('password', password.value)
+    formData.append('nombre_completo', nombre.value)
+    if (avatarFile.value) {
+      formData.append('avatar', avatarFile.value)
+    }
+
     const response = await $fetch(`${config.public.apiBase}/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        email: email.value,
-        password: password.value,
-        nombre_completo: nombre.value
-      }
+      body: formData
     })
 
     if (response?.message === 'Registro exitoso') {
@@ -209,8 +251,7 @@ async function registerWithGoogle() {
   try {
     const { loginWithGoogle: oauthGoogle } = useSupabaseAuth()
     await oauthGoogle()
-    // Supabase redirige automáticamente a Google
-    error.value = 'No se pudo iniciar el registro con Google'
+    // Si no tiró error, el redirect a Google ya está en curso — no es un error.
   } catch (err: any) {
     error.value = 'Google OAuth no está configurado aún. Usá email y contraseña.'
     console.error('Google OAuth error:', err)
@@ -324,6 +365,60 @@ function handleError(err: any) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* ─── AVATAR PICKER ─── */
+.avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.avatar-picker-btn {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--app-border-subtle);
+  color: var(--app-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+.avatar-picker-btn:hover {
+  border-color: var(--app-border-glow);
+  color: #e8c4a0;
+}
+.avatar-picker-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-picker-badge {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e8c4a0;
+  color: #1a1410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0a0a0f;
+}
+.avatar-picker-input {
+  display: none;
+}
+.avatar-picker-label {
+  color: var(--app-text-muted);
+  font-size: 0.75rem;
 }
 
 .field-label {

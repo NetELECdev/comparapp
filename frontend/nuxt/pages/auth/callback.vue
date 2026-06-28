@@ -77,6 +77,29 @@ let sessionGuardada: any = null
 
 const config = useRuntimeConfig()
 
+// Mapea la respuesta del backend (claves crudas tipo es_comercio_user) al mismo
+// formato que ya usa login.vue (es_comercio, comercio_verificado, avatar_url, etc).
+// Sin esto, un usuario logueado con Google quedaba con OTRAS claves en localStorage
+// que con email/password, y cualquier pantalla que lea user.es_comercio (en vez de
+// user.es_comercio_user) nunca lo detectaba como comercio — por eso el ícono de
+// "mis productos" no aparecía para quienes entran con Google.
+function mapBackendUser(raw: any, sessionUser: any, accessToken: string) {
+  const meta = sessionUser?.user_metadata || {}
+  return {
+    id: raw?.id_user || raw?.id || sessionUser?.id || '',
+    email: raw?.email_user || raw?.email || sessionUser?.email || '',
+    nombre_completo: raw?.nombre_completo_user || raw?.nombre_completo || meta.full_name || meta.name || sessionUser?.email || 'Usuario',
+    telefono: raw?.telefono_user || raw?.telefono || '',
+    avatar_url: raw?.avatar_url_user || raw?.avatar_url || meta.avatar_url || meta.picture || null,
+    rol: raw?.rol_user || raw?.rol || 'usuario',
+    activo: raw?.activo_user ?? true,
+    es_comercio: raw?.es_comercio_user ?? raw?.es_comercio ?? false,
+    comercio_verificado: raw?.comercio_verificado_user ?? raw?.comercio_verificado ?? false,
+    id_comer: raw?.id_comer || null,
+    access_token: accessToken
+  }
+}
+
 async function continuarComoUsuario() {
   await navigateTo('/dashboard')
 }
@@ -113,7 +136,7 @@ async function confirmarComercio() {
       }
     })
 
-    const userToSave = { ...res.user, access_token: sessionGuardada.access_token }
+    const userToSave = mapBackendUser(res.user, sessionGuardada.user, sessionGuardada.access_token)
     localStorage.setItem('comparapp_user', JSON.stringify(userToSave))
 
     await navigateTo('/comercio-panel')
@@ -149,7 +172,7 @@ onMounted(async () => {
         }
       })
 
-      const userToSave = { ...userData.user, access_token: session.access_token }
+      const userToSave = mapBackendUser(userData.user, session.user, session.access_token)
       localStorage.setItem('comparapp_user', JSON.stringify(userToSave))
 
       // Si ya es un comercio verificado, va directo a su panel — no preguntamos de nuevo
@@ -164,13 +187,7 @@ onMounted(async () => {
       }
     } catch (backendErr) {
       console.warn('Backend sync failed, using Supabase session directly')
-      const userToSave = {
-        id: session.user?.id,
-        email: session.user?.email,
-        nombre_completo: session.user?.user_metadata?.full_name || session.user?.email,
-        access_token: session.access_token,
-        rol: 'usuario'
-      }
+      const userToSave = mapBackendUser(null, session.user, session.access_token)
       localStorage.setItem('comparapp_user', JSON.stringify(userToSave))
     }
 

@@ -29,6 +29,16 @@
       </div>
       <div class="dash-header-right">
         <ToggleTema />
+        <button
+          v-if="user?.es_comercio && user?.comercio_verificado"
+          class="dash-comercio-btn"
+          aria-label="Mis productos"
+          @click="navigateTo('/comercio-panel')"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+          </svg>
+        </button>
         <button class="dash-notif" aria-label="Notificaciones" @click="navigateTo('/alertas')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
@@ -473,17 +483,14 @@ onMounted(async () => {
   try {
     const token = getToken()
     const [resOfertas, resDestacados, resBusquedas] = await Promise.all([
-      $fetch<{ results: any[] }>(`${config.public.apiBase}/ofertas?limit=6`)
-        .catch((err) => { console.error('🔴 Para vos — falló /ofertas:', err); return { results: [] } }),
-      $fetch<{ results: any[] }>(`${config.public.apiBase}/products/destacados?limit=6`)
-        .catch((err) => { console.error('🔴 Para vos — falló /products/destacados:', err); return { results: [] } }),
+      $fetch<{ results: any[] }>(`${config.public.apiBase}/ofertas?limit=6`).catch(() => ({ results: [] })),
+      $fetch<{ results: any[] }>(`${config.public.apiBase}/products/destacados?limit=6`).catch(() => ({ results: [] })),
       token
         ? $fetch<{ results: any[] }>(`${config.public.apiBase}/search-history?limit=6`, {
             headers: { Authorization: `Bearer ${token}` }
-          }).catch((err) => { console.error('🔴 Para vos — falló /search-history:', err); return { results: [] } })
+          }).catch(() => ({ results: [] }))
         : Promise.resolve({ results: [] })
     ])
-    console.log('🟢 Para vos — respuestas crudas:', { resOfertas, resDestacados, resBusquedas })
 
     const ofertasItems: ParaVosItem[] = (resOfertas.results || []).map((o: any) => ({
       tipo: 'oferta',
@@ -515,7 +522,6 @@ onMounted(async () => {
     }
 
     // Mezcla round-robin entre los 3 tipos para que el carrusel quede mixto, no agrupado
-    const counts = { ofertas: ofertasItems.length, destacados: destacadosItems.length, busquedas: busquedasItems.length }
     const listas = [ofertasItems, destacadosItems, busquedasItems]
     const mezcla: ParaVosItem[] = []
     let agregadoAlgo = true
@@ -530,7 +536,6 @@ onMounted(async () => {
       }
     }
     paraVosItems.value = mezcla
-    console.log(`🟢 Para vos — total final: ${mezcla.length} (ofertas:${counts.ofertas} destacados:${counts.destacados} búsquedas:${counts.busquedas})`)
   } catch (err) {
     console.error('Error cargando Para vos:', err)
   } finally {
@@ -679,6 +684,16 @@ onMounted(async () => {
   background: var(--accent-rose);
   border: 1.5px solid var(--bg-deep);
 }
+
+.dash-comercio-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent-gold-dim);
+  border: 1px solid var(--border-glow);
+  color: var(--accent-gold);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: transform 0.2s, border-color 0.2s;
+}
+.dash-comercio-btn:hover { transform: translateY(-1px); }
 
 /* ── Main ── */
 .dash-main {

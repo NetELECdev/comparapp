@@ -79,7 +79,7 @@
 
       <!-- TABS -->
       <div class="tabs-bar animate-fade-in-up stagger-2">
-        <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id; tab.id === 'comercios-pendientes' && cargarComerciosPendientes()">
+        <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id; tab.id === 'comercios-pendientes' && cargarComerciosPendientes(); tab.id === 'usuarios' && cargarUsuarios()">
           <span v-html="tab.icon"></span>
           <span class="tab-label">{{ tab.label }}</span>
           <span v-if="tab.id === 'comercios-pendientes' && comerciosPendientes.length > 0" class="tab-badge">{{ comerciosPendientes.length }}</span>
@@ -359,15 +359,72 @@
 
       <!-- TAB: USUARIOS -->
       <div v-if="activeTab === 'usuarios'" class="tab-content animate-fade-in-up">
-        <div class="empty-state">
+        <div class="section-header">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input v-model="searchUsuarios" placeholder="Buscar por nombre o email..." />
+          </div>
+        </div>
+
+        <div v-if="loadingUsuarios" class="empty-state">
+          <div class="loading-spinner" />
+          <p>Cargando usuarios...</p>
+        </div>
+
+        <div v-else-if="usuariosFiltrados.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
               <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
           </div>
-          <h3>Usuarios</h3>
-          <p>Usá el Supabase Dashboard para gestionar usuarios.</p>
+          <h3>Sin usuarios</h3>
+          <p>No hay usuarios que coincidan con la búsqueda.</p>
+        </div>
+
+        <div v-else class="items-list">
+          <article v-for="u in usuariosFiltrados" :key="u.id_user" class="usuario-item">
+            <img
+              :src="u.avatar_url_user || '/images/avatar_default.png'"
+              class="usuario-avatar"
+              @error="($event.target as HTMLImageElement).src = '/images/avatar_default.png'"
+            />
+            <div class="usuario-info">
+              <div class="usuario-nombre-row">
+                <span class="item-name">{{ u.nombre_completo_user || 'Sin nombre' }}</span>
+                <span v-if="u.id_user === miPropioId" class="badge-tu">Tu cuenta</span>
+              </div>
+              <span class="usuario-email">{{ u.email_user }}</span>
+              <div class="usuario-badges">
+                <span class="badge-rol" :class="`badge-rol--${u.rol_user}`">{{ rolLabel(u.rol_user) }}</span>
+                <span v-if="u.es_comercio_user" class="badge-comercio" :class="{ 'badge-comercio--pendiente': !u.comercio_verificado_user }">
+                  🏪 {{ u.comercio_verificado_user ? (u.comercio?.nombre_comer || 'Comercio') : 'Pendiente de aprobación' }}
+                </span>
+                <span class="badge-estado" :class="u.activo_user ? 'badge-estado--activo' : 'badge-estado--inactivo'">
+                  {{ u.activo_user ? 'Activo' : 'Desactivado' }}
+                </span>
+              </div>
+            </div>
+
+            <div v-if="u.id_user !== miPropioId" class="usuario-actions">
+              <select
+                class="rol-select"
+                :value="u.rol_user"
+                @change="pedirCambioRol(u, ($event.target as HTMLSelectElement).value as any)"
+              >
+                <option value="usuario">Usuario</option>
+                <option value="comercio">Comercio</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button v-if="u.activo_user" class="btn-sm danger" @click="confirmDelete('usuario', u)">Desactivar</button>
+              <button v-else class="btn-sm" @click="reactivarUsuario(u)">Reactivar</button>
+            </div>
+            <div v-else class="usuario-actions usuario-actions--self">
+              <span class="form-hint">No podés modificar tu propia cuenta</span>
+            </div>
+          </article>
         </div>
       </div>
 
@@ -493,11 +550,6 @@
                 <span class="form-hint">Unidad del envase (no de la unidad mínima)</span>
               </div>
               <div class="form-group full">
-                <label>Código de barras (EAN)</label>
-                <input v-model="formProducto.ean_prod" type="text" placeholder="Ej: 7791234567890" inputmode="numeric" />
-                <span class="form-hint">Opcional. Permite identificar el mismo producto exacto entre comercios.</span>
-              </div>
-              <div class="form-group full">
                 <label>Comercio *</label>
                 <select v-model="formProducto.comercio_prod" required>
                   <option value="">Seleccionar...</option>
@@ -595,11 +647,41 @@
           <div class="modal-container modal-sm">
             <div class="modal-header"><h3>¿Eliminar?</h3></div>
             <div class="modal-body">
-              <p class="confirm-text">¿Eliminar {{ deleteItemName }}? No se puede deshacer.</p>
+              <p class="confirm-text" v-if="deleteType === 'producto'">¿Eliminar {{ deleteItemName }}? No se puede deshacer.</p>
+              <p class="confirm-text" v-else-if="deleteType === 'comercio'">¿Desactivar "{{ deleteItemName }}"? Deja de aparecer activo en la plataforma, pero podés reactivarlo después.</p>
+              <p class="confirm-text" v-else-if="deleteType === 'usuario'">¿Desactivar a "{{ deleteItemName }}"? No va a poder usar la app hasta que lo reactives.</p>
+              <p class="confirm-text" v-else>¿Eliminar {{ deleteItemName }}?</p>
               <div class="form-actions">
                 <button class="btn-secondary" @click="deleteModalOpen = false">Cancelar</button>
                 <button class="btn-danger" @click="executeDelete" :disabled="deleting">
                   {{ deleting ? 'Eliminando...' : 'Sí, eliminar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- CONFIRM CAMBIO DE ROL -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="roleModalOpen" class="modal-overlay" @click.self="roleModalOpen = false">
+          <div class="modal-container modal-sm">
+            <div class="modal-header"><h3>¿Cambiar rol?</h3></div>
+            <div class="modal-body">
+              <p class="confirm-text">
+                ¿Cambiar el rol de <strong>{{ roleChangeUsuario?.nombre_completo_user }}</strong>
+                de <strong>{{ rolLabel(roleChangeUsuario?.rol_user || '') }}</strong>
+                a <strong>{{ rolLabel(roleChangeNuevoRol) }}</strong>?
+              </p>
+              <p v-if="roleChangeNuevoRol === 'admin'" class="form-hint form-hint--warning">
+                ⚠️ Le vas a dar acceso total de administrador a la plataforma.
+              </p>
+              <div class="form-actions">
+                <button class="btn-secondary" @click="roleModalOpen = false">Cancelar</button>
+                <button class="btn-primary" @click="confirmarCambioRol" :disabled="cambiandoRol">
+                  {{ cambiandoRol ? 'Aplicando...' : 'Confirmar' }}
                 </button>
               </div>
             </div>
@@ -640,7 +722,6 @@ interface Producto {
   marca_prod: string
   imagen_prod: string | null
   precio_prod: string
-  ean_prod?: string | null
 }
 
 interface Comercio {
@@ -690,6 +771,20 @@ const searchProductos = ref('')
 const searchComercios = ref('')
 
 // ─── Solicitudes de comercio pendientes ──────────────────────
+interface Usuario {
+  id_user: string
+  email_user: string
+  nombre_completo_user: string
+  rol_user: 'usuario' | 'comercio' | 'admin'
+  es_comercio_user: boolean
+  comercio_verificado_user: boolean
+  activo_user: boolean
+  avatar_url_user: string | null
+  fecha_registro_user: string | null
+  id_comer: string | null
+  comercio?: { nombre_comer: string } | null
+}
+
 interface SolicitudComercio {
   id_user: string
   email_user: string
@@ -702,6 +797,93 @@ interface SolicitudComercio {
 const comerciosPendientes = ref<SolicitudComercio[]>([])
 const loadingPendientes = ref(false)
 const procesandoId = ref<string | null>(null)
+
+// ─── Gestión de usuarios ──────────────────────────────────────
+const usuarios = ref<Usuario[]>([])
+const loadingUsuarios = ref(false)
+const searchUsuarios = ref('')
+const miPropioId = ref('')
+
+const usuariosFiltrados = computed(() => {
+  if (!searchUsuarios.value.trim()) return usuarios.value
+  const q = searchUsuarios.value.toLowerCase()
+  return usuarios.value.filter(u =>
+    u.email_user?.toLowerCase().includes(q) || u.nombre_completo_user?.toLowerCase().includes(q)
+  )
+})
+
+function rolLabel(rol: string) {
+  if (rol === 'admin') return 'Admin'
+  if (rol === 'comercio') return 'Comercio'
+  return 'Usuario'
+}
+
+async function cargarUsuarios() {
+  loadingUsuarios.value = true
+  try {
+    const res = await $fetch<{ count: number; results: Usuario[] }>(
+      `${config.public.apiBase}/admin/usuarios`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    )
+    usuarios.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando usuarios:', err)
+    showToast('Error cargando usuarios', 'error')
+  } finally {
+    loadingUsuarios.value = false
+  }
+}
+
+// Cambiar rol — pide confirmación siempre, porque tocar el rol (sobre todo
+// promover a admin) es una acción sensible que no debería salir de un solo click.
+const roleModalOpen = ref(false)
+const roleChangeUsuario = ref<Usuario | null>(null)
+const roleChangeNuevoRol = ref<'usuario' | 'comercio' | 'admin'>('usuario')
+const cambiandoRol = ref(false)
+
+function pedirCambioRol(u: Usuario, nuevoRol: 'usuario' | 'comercio' | 'admin') {
+  if (nuevoRol === u.rol_user) return
+  roleChangeUsuario.value = u
+  roleChangeNuevoRol.value = nuevoRol
+  roleModalOpen.value = true
+}
+
+async function confirmarCambioRol() {
+  if (!roleChangeUsuario.value) return
+  cambiandoRol.value = true
+  try {
+    await $fetch(`${config.public.apiBase}/admin/usuarios/${roleChangeUsuario.value.id_user}/rol`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: { rol: roleChangeNuevoRol.value }
+    })
+    const idx = usuarios.value.findIndex(u => u.id_user === roleChangeUsuario.value?.id_user)
+    if (idx >= 0) usuarios.value[idx].rol_user = roleChangeNuevoRol.value
+    showToast(`Rol actualizado a "${rolLabel(roleChangeNuevoRol.value)}"`)
+    roleModalOpen.value = false
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'No se pudo cambiar el rol', 'error')
+  } finally {
+    cambiandoRol.value = false
+  }
+}
+
+// Reactivar: acción segura y reversible, sin modal.
+// Desactivar: pasa por el mismo modal de confirmación que productos/comercios.
+async function reactivarUsuario(u: Usuario) {
+  try {
+    await $fetch(`${config.public.apiBase}/admin/usuarios/${u.id_user}/estado`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: { activo: true }
+    })
+    const idx = usuarios.value.findIndex(x => x.id_user === u.id_user)
+    if (idx >= 0) usuarios.value[idx].activo_user = true
+    showToast('Usuario reactivado')
+  } catch (err: any) {
+    showToast(err?.data?.detail || 'No se pudo reactivar', 'error')
+  }
+}
 
 function getToken() {
   try {
@@ -972,7 +1154,7 @@ const nuevaCategoria = ref('')
 const formProducto = ref<Partial<Producto>>({
   nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
   cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
-  describe_prod: '', imagen_prod: '', activo_prod: true, ean_prod: ''
+  describe_prod: '', imagen_prod: '', activo_prod: true
 })
 
 function openModal(type: string) {
@@ -981,7 +1163,7 @@ function openModal(type: string) {
     formProducto.value = {
       nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
       cantidad_prod: 1, unidad_prod: 'Unidad', comercio_prod: '',
-      describe_prod: '', imagen_prod: '', activo_prod: true, ean_prod: ''
+      describe_prod: '', imagen_prod: '', activo_prod: true
     }
     modalProductoOpen.value = true
   } else if (type === 'comercio') {
@@ -1015,7 +1197,6 @@ async function saveProducto() {
       describe_prod: formProducto.value.describe_prod?.trim() || null,
       imagen_prod: formProducto.value.imagen_prod?.trim() || null,
       activo_prod: !!formProducto.value.activo_prod,
-      ean_prod: formProducto.value.ean_prod?.trim() || null,
     }
     if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.comercio_prod) {
       showToast('Completá todos los campos requeridos (*)', 'error')
@@ -1083,12 +1264,20 @@ async function saveComercio() {
     }
     if (!payload.nombre_comer) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
     if (editingComercioId.value) {
-      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios/${editingComercioId.value}`, { method: 'PUT', body: payload })
+      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios/${editingComercioId.value}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       const idx = comercios.value.findIndex(p => p.id_comer === editingComercioId.value)
       if (idx >= 0) comercios.value[idx] = { ...comercios.value[idx], ...res.data } as Comercio
       showToast('Comercio actualizado')
     } else {
-      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios`, { method: 'POST', body: payload })
+      const res = await $fetch<{ data: Comercio }>(`${config.public.apiBase}/comercios`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       if (res.data) comercios.value.unshift(res.data)
       else await loadData()
       showToast('Comercio creado')
@@ -1111,7 +1300,7 @@ const deleteItemName = ref('')
 function confirmDelete(type: string, item: any) {
   deleteType.value = type
   deleteItem.value = item
-  deleteItemName.value = item.nombre_prod || item.nombre_comer || 'elemento'
+  deleteItemName.value = item.nombre_prod || item.nombre_comer || item.nombre_completo_user || 'elemento'
   deleteModalOpen.value = true
 }
 
@@ -1120,16 +1309,36 @@ async function executeDelete() {
   try {
     const item = deleteItem.value
     if (deleteType.value === 'producto') {
-      await $fetch(`${config.public.apiBase}/products/${item.id_prod}`, { method: 'DELETE' })
+      await $fetch(`${config.public.apiBase}/products/${item.id_prod}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` }
+      })
       productos.value = productos.value.filter(p => p.id_prod !== item.id_prod)
       showToast('Producto eliminado')
     } else if (deleteType.value === 'comercio') {
       try {
-        await $fetch(`${config.public.apiBase}/comercios/${item.id_comer}`, { method: 'PUT', body: { activo_comer: false } })
+        await $fetch(`${config.public.apiBase}/comercios/${item.id_comer}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: { activo_comer: false }
+        })
         const idx = comercios.value.findIndex(p => p.id_comer === item.id_comer)
         if (idx >= 0) comercios.value[idx].activo_comer = false
         showToast('Comercio desactivado')
       } catch { showToast('No se pudo eliminar el comercio', 'error') }
+    } else if (deleteType.value === 'usuario') {
+      try {
+        await $fetch(`${config.public.apiBase}/admin/usuarios/${item.id_user}/estado`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: { activo: false }
+        })
+        const idx = usuarios.value.findIndex(u => u.id_user === item.id_user)
+        if (idx >= 0) usuarios.value[idx].activo_user = false
+        showToast('Usuario desactivado')
+      } catch (err: any) {
+        showToast(err?.data?.detail || 'No se pudo desactivar el usuario', 'error')
+      }
     }
   } catch (err: any) {
     showToast(err?.message || 'Error al eliminar', 'error')
@@ -1175,7 +1384,14 @@ async function loadData() {
   }
 }
 
-onMounted(() => { loadData(); cargarComerciosPendientes() })
+onMounted(() => {
+  loadData()
+  cargarComerciosPendientes()
+  try {
+    const stored = localStorage.getItem('comparapp_user')
+    if (stored) miPropioId.value = JSON.parse(stored).id || ''
+  } catch {}
+})
 </script>
 
 <style scoped>
@@ -1300,6 +1516,70 @@ onMounted(() => { loadData(); cargarComerciosPendientes() })
 }
 .btn-rechazar:hover:not(:disabled) { background: rgba(251,113,133,0.2); }
 .btn-rechazar:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── USUARIOS ─── */
+.usuario-item {
+  display: flex; align-items: center; gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.usuario-avatar {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  object-fit: cover; background: var(--bg-input);
+}
+.usuario-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.usuario-nombre-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.usuario-email {
+  font-size: 0.78rem; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.usuario-badges { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.2rem; }
+
+.badge-tu {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  padding: 0.1rem 0.4rem; border-radius: 4px;
+  background: rgba(232,196,160,0.15); color: var(--accent-gold);
+  border: 1px solid rgba(232,196,160,0.3);
+}
+
+.badge-rol {
+  font-size: 0.68rem; font-weight: 600;
+  padding: 0.15rem 0.5rem; border-radius: 20px;
+  border: 1px solid transparent;
+}
+.badge-rol--usuario { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.badge-rol--comercio { background: rgba(96,165,250,0.12); color: var(--accent-blue); border-color: rgba(96,165,250,0.25); }
+.badge-rol--admin { background: rgba(232,196,160,0.15); color: var(--accent-gold); border-color: rgba(232,196,160,0.3); }
+
+.badge-comercio {
+  font-size: 0.68rem; font-weight: 500;
+  padding: 0.15rem 0.5rem; border-radius: 20px;
+  background: rgba(52,211,153,0.1); color: var(--accent-emerald);
+  border: 1px solid rgba(52,211,153,0.25);
+}
+.badge-comercio--pendiente { background: rgba(251,191,36,0.1); color: var(--accent-amber); border-color: rgba(251,191,36,0.25); }
+
+.badge-estado {
+  font-size: 0.68rem; font-weight: 600;
+  padding: 0.15rem 0.5rem; border-radius: 20px;
+}
+.badge-estado--activo { background: rgba(52,211,153,0.1); color: var(--accent-emerald); }
+.badge-estado--inactivo { background: rgba(251,113,133,0.12); color: var(--accent-rose); }
+
+.usuario-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.usuario-actions--self { color: var(--text-muted); font-size: 0.72rem; font-style: italic; max-width: 110px; text-align: right; }
+.rol-select {
+  padding: 0.4rem 0.6rem; border-radius: var(--radius-sm);
+  background: var(--bg-input); border: 1px solid var(--border-subtle);
+  color: var(--text-primary); font-size: 0.78rem; cursor: pointer;
+}
+
+.form-hint--warning {
+  color: var(--accent-amber); background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.2); border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem; font-style: normal; margin: 0.5rem 0;
+}
 
 
 /* ─── SECTION HEADER ─── */

@@ -209,13 +209,13 @@ async function loginWithGoogle() {
   try {
     const { loginWithGoogle: oauthGoogle } = useSupabaseAuth()
     await oauthGoogle()
-    // Si llegamos hasta aquí sin excepción, el redirect a Google ya está en
-    // curso (signInWithOAuth dispara window.location internamente). No es
-    // un error — el navegador todavía no terminó de cambiar de página.
-    // Dejamos el botón en estado "Conectando..." sin mostrar ningún mensaje.
+    // Si no tiró error, el redirect a Google ya está en curso (window.location
+    // está cambiando). No es un error — antes esto seteaba un mensaje de error
+    // que se veía un instante en pantalla antes de que la página navegara afuera.
   } catch (err: any) {
-    error.value = 'No se pudo iniciar sesión con Google. Intentá de nuevo.'
+    error.value = 'Google OAuth no está configurado aún. Usá email y contraseña.'
     console.error('Google OAuth error:', err)
+  } finally {
     loadingGoogle.value = false
   }
 }
@@ -263,17 +263,20 @@ function handleError(err: any) {
 }
 
 /* ─── LOGIN WRAPPER — contenedor raíz transparente ─── */
+/* ← CAMBIO: reemplaza .app-page, sin fondo propio para dejar ver el fondo global de app.vue */
 .login-wrapper {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* Sin background — el fondo lo provee #app-background en app.vue */
 }
 
 /* ─── LOGIN CONTENT ─── */
 .login-content {
   position: relative;
+  /* ← CAMBIO: eliminado z-index: 2, no es necesario con #app-background en z-index: -1 */
   min-height: 100vh;
   display: flex;
   flex-direction: column;

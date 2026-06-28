@@ -7,7 +7,7 @@ Descripcion:
     supabase_config.py y database_manager.py
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body, UploadFile, File, Form
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -101,11 +101,27 @@ def set_user_from_token(db: DatabaseManager, authorization: Optional[str]):
                 # Leer rol y datos de comercio desde tabla users
                 try:
                     user_res = db.supabase.table("users")\
-                        .select("rol_user, id_comer, es_comercio_user, comercio_verificado_user")\
+                        .select("id_user, rol_user, id_comer, es_comercio_user, comercio_verificado_user, activo_user")\
                         .eq("id_user", user.user.id)\
                         .execute()
+                    # Fallback: si esta identidad de Auth (ej. Google) no tiene fila propia,
+                    # puede que la persona ya tenga cuenta con otra identidad (ej. email/password)
+                    # para el mismo email. Sin esto, cada login con un método distinto generaría
+                    # un usuario "fantasma" o, peor, un error de email duplicado al intentar crearlo.
+                    if not user_res.data and user.user.email:
+                        user_res = db.supabase.table("users")\
+                            .select("id_user, rol_user, id_comer, es_comercio_user, comercio_verificado_user, activo_user")\
+                            .eq("email_user", user.user.email)\
+                            .execute()
                     if user_res.data and len(user_res.data) > 0:
                         row = user_res.data[0]
+                        # Cuenta desactivada por un admin → no se establece current_user.
+                        # Todo endpoint que chequea "if not db.current_user: 401" lo bloquea acá,
+                        # sin esto desactivar a alguien era puramente cosmético.
+                        if row.get("activo_user") is False:
+                            return
+                        # Normalizar el id al de la fila real en 'users', no al de esta identidad de Auth
+                        user_data["id"] = row.get("id_user", user.user.id)
                         user_data["rol_user"] = row.get("rol_user", "usuario")
                         user_data["id_comer"] = row.get("id_comer")
                         user_data["es_comercio_user"] = row.get("es_comercio_user", False)
@@ -143,14 +159,23 @@ def forgot_password(
     return {"message": "Si el email existe, recibiras un link para resetear tu contrasena."}
 
 @app.post("/api/v1/register", tags=["Auth"])
-def register_user(
-    email: str = Body(...),
-    password: str = Body(...),
-    nombre_completo: str = Body(...),
-    telefono: Optional[str] = Body(None),
+async def register_user(
+    email: str = Form(...),
+    password: str = Form(...),
+    nombre_completo: str = Form(...),
+    telefono: Optional[str] = Form(None),
+    avatar: Optional[UploadFile] = File(None),
     db: DatabaseManager = Depends(get_db)
 ):
-    success, msg, user_data = db.register_user(email, password, nombre_completo, telefono)
+    avatar_bytes = None
+    avatar_ext = None
+    if avatar is not None and avatar.filename:
+        avatar_ext = avatar.filename.split(".")[-1].lower()
+        if avatar_ext not in ("jpg", "jpeg", "png", "webp"):
+            raise HTTPException(status_code=400, detail="Formato de imagen no soportado (usar jpg, png o webp)")
+        avatar_bytes = await avatar.read()
+
+    success, msg, user_data = db.register_user(email, password, nombre_completo, telefono, avatar_bytes, avatar_ext)
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return {"message": msg, "user": user_data}
@@ -216,6 +241,9 @@ def google_oauth_callback(
             existing = res if res.data else None
 
         if existing and existing.data:
+            # Cuenta desactivada por un admin — no se sincroniza ni se deja pasar
+            if existing.data[0].get("activo_user") is False:
+                raise HTTPException(status_code=403, detail="Tu cuenta fue desactivada. Contactá al administrador.")
             # Ya existe — mantenemos el nombre que ya tenía en la BD,
             # no lo pisamos con el que mande Google en este login
             user_data = existing.data[0]
@@ -354,7 +382,7 @@ def create_product(
 @app.get("/api/v1/products/search", tags=["Productos"])
 def search_products_comparison(
     q: str = Query(..., min_length=1, description="Termino de busqueda"),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
     authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
@@ -381,7 +409,7 @@ def search_products_comparison(
         params = {
             "select": "*",
             "activo_prod": "eq.true",
-            "or": f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*,comercio_prod.ilike.*{q}*)",
+            "or": f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*)",
             "limit": limit
         }
 
@@ -466,6 +494,7 @@ def get_productos_destacados(
 @app.get("/api/v1/products", tags=["Productos"])
 def get_all_products(
     q: Optional[str] = Query(""),
+    comercio: Optional[str] = Query(None, description="Filtra por comercio_prod exacto (no es búsqueda difusa)"),
     limit: Optional[int] = Query(None),
     db: DatabaseManager = Depends(get_db)
 ):
@@ -491,6 +520,9 @@ def get_all_products(
 
         if q and q.strip():
             params["nombre_prod"] = f"ilike.%{q}%"
+
+        if comercio and comercio.strip():
+            params["comercio_prod"] = f"eq.{comercio.strip()}"
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
 
@@ -1007,8 +1039,13 @@ def get_comercio_by_id(comercio_id: str, db: DatabaseManager = Depends(get_db)):
 @app.post("/api/v1/comercios", tags=["Comercios"])
 def create_comerdor(
     comercio_data: dict = Body(...),
+    authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores pueden crear comercios")
+
     comercio, error = db.insert_comercio(comercio_data)
     if error:
         raise HTTPException(status_code=400, detail=error)
@@ -1018,15 +1055,28 @@ def create_comerdor(
 def update_comerdor(
     comercio_id: str,
     update_data: dict = Body(...),
+    authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores pueden editar comercios")
+
     comercio, error = db.update_comerdor(comercio_id, update_data)
     if error:
         raise HTTPException(status_code=400, detail=error)
     return {"message": "Comercio actualizado", "data": comercio}
 
 @app.delete("/api/v1/comercios/{comercio_id}", tags=["Comercios"])
-def delete_comerdor(comercio_id: str, db: DatabaseManager = Depends(get_db)):
+def delete_comerdor(
+    comercio_id: str,
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores pueden eliminar comercios")
+
     success, msg = db.delete_comerdor(comercio_id)
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -2168,6 +2218,116 @@ def register_comercio_user(
     }
 
 
+def _contar_admins_activos(db: DatabaseManager, excluir_id: Optional[str] = None) -> int:
+    """Cuenta administradores activos, excepto excluir_id (para validar 'me quedaría 0')."""
+    query = db.supabase.table("users").select("id_user").eq("rol_user", "admin").eq("activo_user", True)
+    if excluir_id:
+        query = query.neq("id_user", excluir_id)
+    res = query.execute()
+    return len(res.data or [])
+
+
+# ---------- 2.9 Admin: gestión de usuarios ----------
+@app.get("/api/v1/admin/usuarios", tags=["Admin"])
+def listar_usuarios(
+    q: Optional[str] = Query(None, description="Busca por email o nombre"),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    try:
+        query = db.supabase.table("users").select(
+            "id_user, email_user, nombre_completo_user, rol_user, es_comercio_user, "
+            "comercio_verificado_user, activo_user, avatar_url_user, fecha_registro_user, "
+            "id_comer, comercio!users_id_comer_fkey(nombre_comer)"
+        ).order("fecha_registro_user", desc=True)
+
+        if q and q.strip():
+            term = q.strip()
+            query = query.or_(f"email_user.ilike.%{term}%,nombre_completo_user.ilike.%{term}%")
+
+        res = query.execute()
+        return {"count": len(res.data or []), "results": res.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/v1/admin/usuarios/{user_id}/rol", tags=["Admin"])
+def cambiar_rol_usuario(
+    user_id: str,
+    data: dict = Body(...),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    nuevo_rol = (data.get("rol") or "").strip()
+    if nuevo_rol not in ("usuario", "comercio", "admin"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Debe ser usuario, comercio o admin")
+
+    # No te podés cambiar el rol a vos mismo — evita auto-degradarte o
+    # auto-promoverte sin que quede claro quién lo hizo.
+    mi_id = (db.current_user or {}).get("id")
+    if user_id == mi_id:
+        raise HTTPException(status_code=400, detail="No podés cambiar tu propio rol. Pedile a otro administrador.")
+
+    actual = db.supabase.table("users").select("id_user, rol_user").eq("id_user", user_id).limit(1).execute()
+    if not actual.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    rol_actual = actual.data[0].get("rol_user")
+
+    # Si le estás sacando el rol admin a alguien, asegurate de que no sea el último
+    if rol_actual == "admin" and nuevo_rol != "admin":
+        if _contar_admins_activos(db, excluir_id=user_id) < 1:
+            raise HTTPException(status_code=400, detail="No podés sacarle el rol de admin al último administrador activo")
+
+    try:
+        db.supabase.table("users").update({"rol_user": nuevo_rol}).eq("id_user", user_id).execute()
+        return {"message": f"Rol actualizado a '{nuevo_rol}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/v1/admin/usuarios/{user_id}/estado", tags=["Admin"])
+def cambiar_estado_usuario(
+    user_id: str,
+    data: dict = Body(...),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    nuevo_activo = data.get("activo")
+    if not isinstance(nuevo_activo, bool):
+        raise HTTPException(status_code=400, detail="El campo 'activo' debe ser true o false")
+
+    mi_id = (db.current_user or {}).get("id")
+    if user_id == mi_id and not nuevo_activo:
+        raise HTTPException(status_code=400, detail="No podés desactivar tu propia cuenta")
+
+    actual = db.supabase.table("users").select("id_user, rol_user, activo_user").eq("id_user", user_id).limit(1).execute()
+    if not actual.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    fila = actual.data[0]
+
+    if fila.get("rol_user") == "admin" and fila.get("activo_user") and not nuevo_activo:
+        if _contar_admins_activos(db, excluir_id=user_id) < 1:
+            raise HTTPException(status_code=400, detail="No podés desactivar al último administrador activo")
+
+    try:
+        db.supabase.table("users").update({"activo_user": nuevo_activo}).eq("id_user", user_id).execute()
+        return {"message": "Usuario activado" if nuevo_activo else "Usuario desactivado"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------- 3. Admin: listar comercios pendientes de aprobación ----------
 @app.get("/api/v1/admin/comercios-pendientes", tags=["Comercio Users"])
 def listar_comercios_pendientes(
@@ -2317,6 +2477,47 @@ async def upload_imagen_producto(
         raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
 
 
+# ---------- 7.5. Logo del comercio (lo sube el propio comercio verificado) ----------
+@app.post("/api/v1/comercio-panel/logo", tags=["Comercio Users"])
+async def subir_logo_comercio(
+    logo: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    El comercio verificado sube su propio logo. Se guarda en comercio.logo_comer
+    y queda visible para todos los usuarios en el carrusel de comercios del dashboard.
+    Solo puede tocar SU PROPIO id_comer (viene del token, no de un parámetro).
+    """
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    id_comer = db.current_user.get("id_comer")
+    if not db.current_user.get("comercio_verificado_user") or not id_comer:
+        raise HTTPException(status_code=403, detail="Solo comercios verificados pueden actualizar su logo")
+
+    ext = (logo.filename or "").split(".")[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp"):
+        raise HTTPException(status_code=400, detail="Formato de imagen no soportado (usar jpg, png o webp)")
+
+    try:
+        contenido = await logo.read()
+        nombre_archivo = f"logos-comercio/{id_comer}.{ext}"
+        db.supabase.storage.from_("product-images").upload(
+            nombre_archivo,
+            contenido,
+            {"content-type": logo.content_type or "image/jpeg", "upsert": "true"}
+        )
+        url_publica = db.supabase.storage.from_("product-images").get_public_url(nombre_archivo)
+
+        db.supabase.table("comercio").update({"logo_comer": url_publica}).eq("id_comer", id_comer).execute()
+
+        return {"url": url_publica}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al subir el logo: {str(e)}")
+
+
 # ============================================================
 # ENDPOINT: Registro de comercio vía Google OAuth
 # Pegar en main.py junto a los demás endpoints de "Comercio Users"
@@ -2377,20 +2578,25 @@ def register_comercio_google(
         if not supabase_user_id:
             raise HTTPException(status_code=401, detail="No se pudo verificar la identidad de Google")
 
+        # Normalizar contra la fila real en 'users': esta identidad de Auth (Google) puede no
+        # tener fila propia si la persona ya se registró antes con email/password para el mismo
+        # email. Sin este fallback, el insert de más abajo choca con la restricción UNIQUE de
+        # email_user (error 'duplicate key value violates unique constraint users_email_user_key').
+        fila_existente = db.supabase.table("users").select("*").eq("id_user", supabase_user_id).execute()
+        if not fila_existente.data:
+            fila_existente = db.supabase.table("users").select("*").eq("email_user", user_email).execute()
+        id_user_real = fila_existente.data[0]["id_user"] if fila_existente.data else supabase_user_id
+
         # Verificar que ese comercio no tenga ya un dueño verificado QUE NO SEA este mismo usuario
         existente = db.supabase.table("users") \
             .select("id_user") \
             .eq("id_comer", id_comer) \
             .eq("comercio_verificado_user", True) \
             .execute()
-        if existente.data and any(u["id_user"] != supabase_user_id for u in existente.data):
+        if existente.data and any(u["id_user"] != id_user_real for u in existente.data):
             raise HTTPException(status_code=400, detail="Este comercio ya tiene un usuario verificado asignado")
 
-        # Buscar si ya existe en la tabla users
-        existing_user = db.supabase.table("users") \
-            .select("*") \
-            .eq("id_user", supabase_user_id) \
-            .execute()
+        existing_user = fila_existente
 
         if existing_user.data:
             user_data = existing_user.data[0]
@@ -2404,7 +2610,7 @@ def register_comercio_google(
                 return {
                     "message": f"Ya tenés acceso verificado a '{nombre_comer}'.",
                     "user": {
-                        "id": supabase_user_id,
+                        "id": id_user_real,
                         "email": user_email,
                         "nombre_completo": nombre_final,
                         "rol": "comercio",
@@ -2414,14 +2620,15 @@ def register_comercio_google(
                         "access_token": access_token
                     }
                 }
-            # Ya existía (por ejemplo, ya era usuario normal) — lo convertimos a comercio pendiente
+            # Ya existía (por ejemplo, ya era usuario normal, con esta identidad o con otra
+            # para el mismo email) — lo convertimos a comercio pendiente.
             # Mantenemos el nombre que ya tenía en la BD, no lo pisamos con el de Google
             db.supabase.table("users").update({
                 "es_comercio_user": True,
                 "comercio_verificado_user": False,
                 "id_comer": id_comer,
                 "rol_user": "comercio"
-            }).eq("id_user", supabase_user_id).execute()
+            }).eq("id_user", id_user_real).execute()
         else:
             # Crear el usuario nuevo, directamente como comercio pendiente
             new_user = {
@@ -2441,7 +2648,7 @@ def register_comercio_google(
         return {
             "message": f"Registro recibido. Tu acceso para '{nombre_comer}' está pendiente de aprobación.",
             "user": {
-                "id": supabase_user_id,
+                "id": id_user_real,
                 "email": user_email,
                 "nombre_completo": nombre_final,
                 "rol": "comercio",
