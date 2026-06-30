@@ -16,26 +16,52 @@ import struct
 import binascii
 
 
-class DatabaseManager:
-    def __init__(self):
-        self.session = requests.Session()
-        self.current_user = None
-        url = SupabaseConfig.get_url()
-        # Service role key — bypasea RLS para todas las operaciones del backend
-        key = SupabaseConfig.get_service_key()
-        self.supabase = create_client(url, key)
+LIMITE_PRODUCTOS_PLAN_FREE = 10
 
-        # Diagnóstico: confirmar qué rol tiene realmente la key cargada (sin loguear la key).
-        # Si esto imprime 'anon' en vez de 'service_role', el .env tiene SUPABASE_SERVICE_KEY
-        # mal puesta (o vacía) y por eso las subidas a Storage chocan con RLS.
-        try:
-            import base64 as _b64
-            payload_b64 = key.split('.')[1]
-            payload_b64 += '=' * (-len(payload_b64) % 4)
-            rol_key = json.loads(_b64.urlsafe_b64decode(payload_b64)).get('role', '?')
-            print(f"🔑 Supabase client iniciado con role: {rol_key}")
-        except Exception:
-            print("🔑 No se pudo decodificar el role de la key (revisar formato)")
+
+class DatabaseManager:
+    # Recursos PESADOS y seguros de compartir entre requests: el cliente de
+    # Supabase no guarda en sí mismo a qué usuario pertenece cada consulta
+    # (eso se arma en cada query con .eq(...), .select(...), etc., usando
+    # siempre la misma service_role key). Por eso es seguro tenerlo como
+    # recurso de clase, creado UNA sola vez, y no por cada request — evita
+    # el costo de abrir una conexión HTTP nueva en cada llamada a la API.
+    _shared_supabase: Optional[Client] = None
+    _shared_session: Optional[requests.Session] = None
+
+    def __init__(self):
+        # current_user es SIEMPRE de instancia (nunca de clase). Antes
+        # main.py reusaba una única instancia global de DatabaseManager
+        # para TODOS los requests del servidor: dos personas usando la app
+        # casi al mismo tiempo podían pisarse el current_user entre sí,
+        # viendo o modificando datos del otro. Ahora get_db() (en main.py)
+        # crea una instancia nueva por request, así cada una tiene su
+        # propio current_user — pero comparten el mismo cliente de Supabase
+        # de abajo, así que no se paga el costo de recrearlo cada vez.
+        self.current_user = None
+
+        if DatabaseManager._shared_supabase is None:
+            DatabaseManager._shared_session = requests.Session()
+            url = SupabaseConfig.get_url()
+            # Service role key — bypasea RLS para todas las operaciones del backend
+            key = SupabaseConfig.get_service_key()
+            DatabaseManager._shared_supabase = create_client(url, key)
+
+            # Diagnóstico: confirmar qué rol tiene realmente la key cargada (sin loguear la key).
+            # Si esto imprime 'anon' en vez de 'service_role', el .env tiene SUPABASE_SERVICE_KEY
+            # mal puesta (o vacía) y por eso las subidas a Storage chocan con RLS.
+            # Se imprime una sola vez (al primer request), no en cada uno.
+            try:
+                import base64 as _b64
+                payload_b64 = key.split('.')[1]
+                payload_b64 += '=' * (-len(payload_b64) % 4)
+                rol_key = json.loads(_b64.urlsafe_b64decode(payload_b64)).get('role', '?')
+                print(f"🔑 Supabase client iniciado con role: {rol_key}")
+            except Exception:
+                print("🔑 No se pudo decodificar el role de la key (revisar formato)")
+
+        self.session = DatabaseManager._shared_session
+        self.supabase = DatabaseManager._shared_supabase
 
 
 
@@ -400,6 +426,28 @@ class DatabaseManager:
 
     # ==================== PRODUCTOS ====================
 
+    def _es_premium_vigente(self, fila_comercio: dict) -> bool:
+        """True si el comercio tiene plan premium y no venció (o no tiene fecha de vencimiento)."""
+        plan = (fila_comercio.get('plan_comer') or 'free').strip().lower()
+        if plan != 'premium':
+            return False
+        vencimiento = fila_comercio.get('plan_vencimiento_comer')
+        if not vencimiento:
+            return True
+        from datetime import date
+        try:
+            return str(vencimiento) >= date.today().isoformat()
+        except Exception:
+            return True
+
+    def _contar_productos_activos(self, nombre_comercio: str) -> int:
+        res = self.supabase.table('producto')\
+            .select('id_prod')\
+            .eq('comercio_prod', nombre_comercio)\
+            .eq('activo_prod', True)\
+            .execute()
+        return len(res.data or [])
+
     def create_product(self, product_data: dict) -> Tuple[bool, str]:
         """
         Crea un producto nuevo. Siempre inserta una fila — no fusiona ni
@@ -439,7 +487,7 @@ class DatabaseManager:
                     return False, "Tu cuenta de comercio no está vinculada correctamente. Contactá al administrador."
 
                 comer_res = self.supabase.table('comercio')\
-                    .select('nombre_comer')\
+                    .select('nombre_comer, plan_comer, plan_vencimiento_comer')\
                     .eq('id_comer', mi_id_comer)\
                     .limit(1)\
                     .execute()
@@ -447,9 +495,19 @@ class DatabaseManager:
                 if not comer_res.data:
                     return False, "No se encontró tu comercio asignado"
 
-                nombre_mi_comercio = comer_res.data[0]['nombre_comer']
+                fila_comercio = comer_res.data[0]
+                nombre_mi_comercio = fila_comercio['nombre_comer']
                 if comercio != nombre_mi_comercio:
                     return False, f"Solo podés cargar productos para tu comercio: {nombre_mi_comercio}"
+
+                # Plan free: tope de productos activos. Plan premium vigente: sin límite.
+                if not self._es_premium_vigente(fila_comercio):
+                    cantidad_actual = self._contar_productos_activos(comercio)
+                    if cantidad_actual >= LIMITE_PRODUCTOS_PLAN_FREE:
+                        return False, (
+                            f"Llegaste al límite de {LIMITE_PRODUCTOS_PLAN_FREE} productos del plan gratuito. "
+                            "Para cargar más, necesitás el plan premium — escribinos a netelecinfo@gmail.com."
+                        )
 
             ahora = datetime.now().isoformat()
 
@@ -482,13 +540,47 @@ class DatabaseManager:
         """
         Actualiza un producto. Si cambia el precio, guarda automáticamente
         el precio anterior en historial_precios.
+
+        Permisos:
+        - admin: puede editar cualquier producto
+        - comercio (verificado): solo puede editar productos de SU PROPIO comercio
         """
-        if not self.is_admin():
+        rol = self.get_user_role()
+        if rol not in ('admin', 'comercio'):
             return False, "Permisos insuficientes"
-        
+
         try:
             from datetime import datetime
-            
+
+            if rol == 'comercio':
+                mi_id_comer = (self.current_user or {}).get('id_comer')
+                if not mi_id_comer:
+                    return False, "Tu cuenta de comercio no está vinculada correctamente. Contactá al administrador."
+
+                comer_res = self.supabase.table('comercio')\
+                    .select('nombre_comer')\
+                    .eq('id_comer', mi_id_comer)\
+                    .limit(1)\
+                    .execute()
+                if not comer_res.data:
+                    return False, "No se encontró tu comercio asignado"
+                nombre_mi_comercio = comer_res.data[0]['nombre_comer']
+
+                prod_res = self.supabase.table('producto')\
+                    .select('comercio_prod')\
+                    .eq('id_prod', product_id)\
+                    .limit(1)\
+                    .execute()
+                if not prod_res.data:
+                    return False, "Producto no encontrado"
+                if prod_res.data[0].get('comercio_prod') != nombre_mi_comercio:
+                    return False, "Solo podés editar productos de tu propio comercio"
+
+                # Por las dudas: que no pueda colarse un cambio de dueño del
+                # producto a otro comercio editando el campo comercio_prod.
+                if 'comercio_prod' in product_data and product_data['comercio_prod'] != nombre_mi_comercio:
+                    return False, "No podés cambiar el comercio del producto"
+
             if 'precio_prod' in product_data:
                 try:
                     actual_response = self.supabase.table("producto")\

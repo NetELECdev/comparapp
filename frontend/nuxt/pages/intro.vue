@@ -90,7 +90,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { navigateTo } from '#app'
+import { navigateTo, useRoute } from '#app'
 
 // ============================================
 // ASSETS: strings dinámicos → Vite no los
@@ -270,6 +270,15 @@ function goToLogin() {
 // LIFECYCLE
 // ============================================
 onMounted(() => {
+  // Si Google OAuth falló y nos redirigió de vuelta acá con un ?error=...
+  // en la URL, no tiene sentido mostrarle al usuario la animación de
+  // bienvenida — lo mandamos directo a /login, preservando el error para
+  // que se muestre ahí (ver pages/login.vue).
+  const route = useRoute()
+  if (route.query.error) {
+    return navigateTo({ path: '/login', query: route.query }, { replace: true })
+  }
+
   console.log('🎬 Intro iniciada - Paso 1: Logo')
   verifyLogo()  // ← verificación programática, nunca pierde el evento
 })

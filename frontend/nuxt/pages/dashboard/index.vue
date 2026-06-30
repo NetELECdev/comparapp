@@ -69,6 +69,7 @@
             alt="ComparApp"
             loading="lazy"
           />
+          <span class="brand-banner-name">ComparApp</span>
         </div>
       </section>
 
@@ -761,13 +762,30 @@ onMounted(async () => {
   margin: 0;
 }
 .brand-banner-logo {
-  width: 128px; height: 128px;
+  width: 128px;
   flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
 }
 .brand-banner-logo img {
-  width: 100%; height: 100%;
+  width: 100%; height: 128px;
   object-fit: contain;
+}
+.brand-banner-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* En pantallas angostas, el logo fijo de 128px + el texto + el padding del
+   banner no entraban en el ancho real del viewport — se veía cortado en
+   el borde derecho de la tarjeta. Lo achicamos progresivamente. */
+@media (max-width: 380px) {
+  .brand-banner { gap: 10px; padding: 16px 14px; }
+  .brand-banner-logo { width: 80px; }
+  .brand-banner-logo img { height: 80px; }
 }
 
 /* ── Barra de búsqueda ── */
@@ -788,6 +806,7 @@ onMounted(async () => {
 .search-icon { color: var(--text-muted); flex-shrink: 0; }
 .search-input {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   outline: none;

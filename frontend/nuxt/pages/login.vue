@@ -107,8 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRuntimeConfig, navigateTo } from '#app'
+import { ref, onMounted } from 'vue'
+import { useRuntimeConfig, navigateTo, useRoute } from '#app'
 
 interface LoginResponse {
   message: string
@@ -145,12 +145,31 @@ interface LoginResponse {
 }
 
 const config = useRuntimeConfig()
+const route = useRoute()
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const loadingGoogle = ref(false)
 const showFallback = ref(false)
+
+// Si llegamos acá con ?error=... en la URL, es casi siempre un fallo de
+// Google OAuth que redirigió de vuelta con el error en los query params
+// (ver useSupabaseAuth.ts). Sin esto, el error quedaba en la URL sin que
+// el usuario viera ningún mensaje — la app parecía simplemente "no hacer nada".
+onMounted(() => {
+  const errCode = route.query.error_code as string | undefined
+  const errDesc = route.query.error_description as string | undefined
+  if (errCode || route.query.error) {
+    if (errCode === 'bad_oauth_state') {
+      error.value = 'El inicio de sesión con Google expiró o se interrumpió. Probá de nuevo.'
+    } else {
+      error.value = errDesc?.replace(/\+/g, ' ') || 'No se pudo completar el inicio de sesión con Google. Probá de nuevo.'
+    }
+    // Limpiamos el query string para que no quede pegado si recargan la página
+    navigateTo('/login', { replace: true })
+  }
+})
 
 async function login() {
   error.value = ''

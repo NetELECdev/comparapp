@@ -18,7 +18,7 @@ from collections import defaultdict
 import os
 
 # Importar los modulos locales
-from database_manager import DatabaseManager
+from database_manager import DatabaseManager, LIMITE_PRODUCTOS_PLAN_FREE
 from supabase_config import SupabaseConfig
 
 
@@ -63,7 +63,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Instancia global del administrador de base de datos
+# Instancia usada solo para tareas de arranque/apagado del servidor
+# (ver shutdown_event más abajo). NO se usa para atender requests —
+# cada request recibe su propia instancia vía get_db(), justamente
+# para que current_user nunca se comparta entre personas distintas.
 db = DatabaseManager()
 
 # ---------------------------------------------------
@@ -85,7 +88,12 @@ async def log_requests(request: Request, call_next):
 # ---------------------------------------------------
 
 def get_db() -> DatabaseManager:
-    return db
+    # Una instancia NUEVA por request: cada una tiene su propio current_user,
+    # así que dos personas usando la app al mismo tiempo nunca se pisan entre
+    # sí. La conexión real a Supabase de abajo se sigue compartiendo (ver
+    # DatabaseManager._shared_supabase), así que esto es liviano — no se
+    # abre una conexión HTTP nueva en cada llamada.
+    return DatabaseManager()
 
 def set_user_from_token(db: DatabaseManager, authorization: Optional[str]):
     """Extrae el token Bearer y establece el usuario actual en db."""
@@ -625,24 +633,10 @@ def update_product(
     db: DatabaseManager = Depends(get_db)
 ):
     """
-    Actualiza un producto. Si cambia el precio, guarda el precio anterior en historial_precios.
+    Actualiza un producto. Si cambia el precio, guarda el precio anterior en
+    historial_precios (esto lo hace db.update_product — no se duplica acá).
     """
     set_user_from_token(db, authorization)
-
-    # Si viene precio nuevo, guardar el anterior en historial
-    if "precio_prod" in product_data:
-        try:
-            actual = db.supabase.table("producto").select("precio_prod").eq("id_prod", product_id).execute()
-            if actual.data and len(actual.data) > 0:
-                precio_anterior = actual.data[0].get("precio_prod")
-                if precio_anterior is not None:
-                    db.supabase.table("historial_precios").insert({
-                        "id_prod": product_id,
-                        "precio": precio_anterior
-                    }).execute()
-                    print(f"💾 Precio historico guardado: {precio_anterior} para producto {product_id}")
-        except Exception as hist_err:
-            print(f"⚠️  Error guardando historial (no critico): {hist_err}")
 
     success, msg = db.update_product(product_id, product_data)
     if not success:
@@ -2419,7 +2413,7 @@ def mi_estado_comercio(
 
     try:
         res = db.supabase.table("users") \
-            .select("es_comercio_user, comercio_verificado_user, motivo_rechazo_comercio, id_comer, comercio!users_id_comer_fkey(id_comer, nombre_comer, logo_comer)") \
+            .select("es_comercio_user, comercio_verificado_user, motivo_rechazo_comercio, id_comer, comercio!users_id_comer_fkey(id_comer, nombre_comer, logo_comer, plan_comer, plan_vencimiento_comer)") \
             .eq("id_user", db.current_user["id"]) \
             .limit(1) \
             .execute()
@@ -2427,7 +2421,19 @@ def mi_estado_comercio(
         if not res.data:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-        return res.data[0]
+        data = res.data[0]
+        comercio_info = data.get("comercio") or {}
+
+        if comercio_info:
+            es_premium = db.is_admin() or db._es_premium_vigente(comercio_info)
+            cantidad_actual = db._contar_productos_activos(comercio_info.get("nombre_comer", ""))
+            data["plan"] = {
+                "es_premium": es_premium,
+                "productos_activos": cantidad_actual,
+                "limite_productos": None if es_premium else LIMITE_PRODUCTOS_PLAN_FREE
+            }
+
+        return data
     except HTTPException:
         raise
     except Exception as e:
