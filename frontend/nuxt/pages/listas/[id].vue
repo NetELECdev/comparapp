@@ -51,12 +51,13 @@
         <!-- BARRA DE PROGRESO -->
         <div v-if="items.length > 0" class="progress-bar animate-fade-in-up stagger-1">
           <div class="progress-info">
-            <span>{{ itemsComprados }} de {{ items.length }} comprados</span>
+            <span>{{ itemsComprados }} de {{ items.length }} marcados como comprados</span>
             <span class="progress-pct">{{ Math.round(itemsComprados / items.length * 100) }}%</span>
           </div>
           <div class="progress-track">
             <div class="progress-fill" :style="{ width: `${itemsComprados / items.length * 100}%` }" />
           </div>
+          <p class="progress-hint">Tocá un producto de la lista para cambiar su estado: pendiente → en changuito → comprado</p>
         </div>
 
         <!-- FILTROS DE ESTADO -->
@@ -171,15 +172,24 @@
             />
           </div>
 
+          <!-- Ordenamiento -->
+          <div v-if="productosBuscados.length > 0" class="sort-bar">
+            <span class="sort-label">Ordenar:</span>
+            <button class="sort-chip" :class="{ active: sortBy === 'precio' }" @click="setSortBy('precio')">💲 Precio</button>
+            <button class="sort-chip" :class="{ active: sortBy === 'fecha' }" @click="setSortBy('fecha')">📅 Fecha</button>
+            <button class="sort-chip" :class="{ active: sortBy === 'precio-fecha' }" @click="setSortBy('precio-fecha')">💲+📅 Ambos</button>
+          </div>
+
           <!-- Resultados -->
           <div v-if="loadingProductos" class="state-box-mini">
             <div class="loading-spinner-sm" />
           </div>
-          <div v-else-if="productosBuscados.length > 0" class="productos-lista">
+          <div v-else-if="productosBuscadosOrdenados.length > 0" class="productos-lista">
             <div
-              v-for="prod in productosBuscados"
+              v-for="prod in productosBuscadosOrdenados"
               :key="prod.id_prod"
               class="producto-row"
+              :class="{ 'producto-row--viejo': esProductoViejo(prod) }"
               @click="seleccionarProducto(prod)"
             >
               <img
@@ -191,6 +201,7 @@
               <div class="prod-info">
                 <p class="prod-nombre">{{ prod.nombre_prod }}</p>
                 <p class="prod-meta">{{ prod.marca_prod }} · {{ prod.provee_prod }}</p>
+                <p v-if="esProductoViejo(prod)" class="prod-aviso">⚠️ Precio con más de 7 días — puede no estar actualizado</p>
               </div>
               <span class="prod-precio">${{ Number(prod.precio_prod).toLocaleString('es-AR') }}</span>
             </div>
@@ -287,88 +298,78 @@
 
           <template v-else-if="optimizacion">
 
-            <!-- BLOQUE PRINCIPAL: dos columnas — resumen izq, productos der -->
-            <div v-if="optimizacion.mejor_opcion" class="opt-bloque-principal">
-
-              <!-- Columna izquierda: resumen del mejor proveedor -->
-              <div class="opt-col-resumen">
-                <span class="opt-label-tag opt-tag-verde">Mejor precio</span>
-                <span class="opt-bloque-proveedor">{{ optimizacion.mejor_opcion.proveedor }}</span>
-                <div v-if="optimizacion.mejor_opcion.distancia_km !== null" class="opt-distancia">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {{ labelDistancia(optimizacion.mejor_opcion.distancia_km) }}
-                </div>
-                <span class="opt-bloque-total">${{ formatPrecio(optimizacion.mejor_opcion.total) }}</span>
-                <span v-if="optimizacion.mejor_opcion.ahorro_vs_peor > 0" class="opt-bloque-ahorro">
-                  Ahorrás ${{ formatPrecio(optimizacion.mejor_opcion.ahorro_vs_peor) }} vs el más caro
-                </span>
-                <div v-if="optimizacion.mejor_opcion.completo" class="opt-completo-tag">
-                  ✓ Tiene todos los productos
-                </div>
-              </div>
-
-              <!-- Columna derecha: productos de este proveedor -->
-              <div class="opt-col-productos">
-                <div class="opt-col-titulo">Productos incluidos</div>
-                <div v-for="p in optimizacion.mejor_opcion.detalle_productos" :key="p.nombre" class="opt-prod-row">
-                  <span class="opt-prod-nombre">{{ p.nombre }} ×{{ p.cantidad }}</span>
-                  <span class="opt-prod-precio">${{ formatPrecio(p.precio_unitario) }}</span>
-                </div>
-              </div>
-
+            <!-- Productos sin precio en la BD -->
+            <div v-if="optimizacion.items_sin_precio?.length" class="opt-sin-precio">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+              <span>Sin precio en la plataforma: <strong>{{ optimizacion.items_sin_precio.join(', ') }}</strong></span>
             </div>
 
-            <!-- FALTANTES: mismo criterio, debajo, dentro de la misma sección -->
-            <div v-if="!optimizacion.mejor_opcion?.completo && optimizacion.proveedor_faltantes" class="opt-bloque-faltantes">
-              <div class="opt-faltantes-col-resumen">
-                <span class="opt-label-tag opt-tag-naranja">Faltantes · mejor precio</span>
-                <span class="opt-bloque-proveedor" style="color: var(--accent-amber)">{{ optimizacion.proveedor_faltantes.proveedor }}</span>
-                <div v-if="optimizacion.proveedor_faltantes.distancia_km !== null" class="opt-distancia">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {{ labelDistancia(optimizacion.proveedor_faltantes.distancia_km) }}
+            <!-- Ordenamiento -->
+            <div class="opt-sort-bar">
+              <span class="opt-sort-label">Ver mejor opción por:</span>
+              <button class="opt-sort-chip" :class="{ active: optSort === 'precio' }" @click="optSort = 'precio'">💲 Precio</button>
+              <button class="opt-sort-chip" :class="{ active: optSort === 'distancia' }" @click="optSort = 'distancia'">📍 Cercanía</button>
+            </div>
+
+            <!-- Lista de comercios ordenada según criterio elegido -->
+            <div class="opt-comercios-lista">
+              <div
+                v-for="(com, idx) in comerciosOrdenados"
+                :key="com.comercio"
+                class="opt-comercio-bloque"
+                :class="{ 'opt-comercio-bloque--ganador': idx === 0 }"
+              >
+                <div class="opt-comercio-header">
+                  <div class="opt-comercio-nombre-row">
+                    <span class="opt-tag" :class="idx === 0 ? 'opt-tag-verde' : 'opt-tag-gris'">
+                      {{ idx === 0 ? (optSort === 'precio' ? '💲 Mejor precio' : '📍 Más cercano') : `#${idx + 1}` }}
+                    </span>
+                    <span class="opt-comercio-nombre">{{ com.proveedor }}</span>
+                  </div>
+                  <div class="opt-comercio-meta">
+                    <span v-if="com.distancia_km !== null" class="opt-distancia">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                      {{ labelDistancia(com.distancia_km) }}
+                    </span>
+                    <span class="opt-total">${{ formatPrecio(com.total) }}</span>
+                    <span class="opt-cobertura">{{ com.items_encontrados }}/{{ optimizacion.items_count }} productos</span>
+                  </div>
                 </div>
-                <span class="opt-bloque-total" style="font-size:1.1rem">${{ formatPrecio(optimizacion.proveedor_faltantes.subtotal) }}</span>
-              </div>
-              <div class="opt-col-productos">
-                <div class="opt-col-titulo">Productos faltantes</div>
-                <div v-for="p in optimizacion.proveedor_faltantes.items" :key="p.nombre" class="opt-prod-row">
-                  <span class="opt-prod-nombre">{{ p.nombre }} ×{{ p.cantidad }}</span>
-                  <span class="opt-prod-precio">${{ formatPrecio(p.precio_unitario) }}</span>
+
+                <!-- Detalle de productos de este comercio -->
+                <div class="opt-productos-lista">
+                  <div v-for="p in com.detalle_productos" :key="p.nombre" class="opt-prod-row">
+                    <span class="opt-prod-nombre">
+                      {{ p.nombre }}
+                      <span v-if="p.precio_viejo" class="opt-viejo-tag">⚠️ +7 días</span>
+                    </span>
+                    <span class="opt-prod-detalle">×{{ p.cantidad }}</span>
+                    <span class="opt-prod-precio" :class="{ 'opt-prod-precio--viejo': p.precio_viejo }">${{ formatPrecio(p.precio_unitario) }}</span>
+                  </div>
+                  <!-- Faltantes en este comercio -->
+                  <div v-for="falt in com.items_faltantes" :key="falt" class="opt-prod-row opt-prod-faltante">
+                    <span class="opt-prod-nombre">{{ falt }}</span>
+                    <span class="opt-prod-faltante-tag">Sin precio actualizado</span>
+                  </div>
+                </div>
+
+                <!-- Total del bloque -->
+                <div class="opt-comercio-footer">
+                  <span>Total en este comercio</span>
+                  <span class="opt-total-footer">${{ formatPrecio(com.total) }}</span>
                 </div>
               </div>
             </div>
 
-            <!-- ALTERNATIVA COMPLETA -->
-            <div
-              v-if="optimizacion.alternativa_completa &&
-                    optimizacion.alternativa_completa.proveedor !== optimizacion.mejor_opcion?.proveedor"
-              class="opt-bloque-alternativa"
-            >
-              <span class="opt-label-tag opt-tag-gris">Alternativa · lista completa</span>
-              <div class="opt-alt-fila">
-                <span class="opt-alt-proveedor">{{ optimizacion.alternativa_completa.proveedor }}</span>
-                <div v-if="optimizacion.alternativa_completa.distancia_km !== null" class="opt-distancia">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {{ labelDistancia(optimizacion.alternativa_completa.distancia_km) }}
-                </div>
-                <span class="opt-alt-total">${{ formatPrecio(optimizacion.alternativa_completa.total) }}</span>
-              </div>
-              <span class="opt-alt-diff">
-                +${{ formatPrecio(optimizacion.alternativa_completa.total - (optimizacion.mejor_opcion?.total || 0)) }} más, pero tiene todos los productos
-              </span>
-            </div>
-
-            <!-- DIVISIÓN ÓPTIMA -->
+            <!-- División óptima -->
             <div v-if="optimizacion.division_sugerida && optimizacion.division_sugerida.ahorro_vs_unico > 0" class="opt-bloque-division">
-              <span class="opt-label-tag opt-tag-dorado">División óptima · {{ optimizacion.division_sugerida.cantidad_proveedores }} comercios</span>
-              <span class="opt-div-total">${{ formatPrecio(optimizacion.division_sugerida.total) }}</span>
-              <span class="opt-div-ahorro">Ahorrás ${{ formatPrecio(optimizacion.division_sugerida.ahorro_vs_unico) }} extra repartiendo la compra</span>
-              <div v-for="div in optimizacion.division_sugerida.proveedores" :key="div.proveedor" class="opt-div-grupo">
+              <span class="opt-label-tag opt-tag-dorado">División óptima · {{ optimizacion.division_sugerida.cantidad_comercios }} comercios · Ahorrás ${{ formatPrecio(optimizacion.division_sugerida.ahorro_vs_unico) }}</span>
+              <div v-for="div in optimizacion.division_sugerida.comercios" :key="div.comercio" class="opt-div-grupo">
                 <div class="opt-div-grupo-header">
                   <div class="opt-prov-con-distancia">
-                    <span>{{ div.proveedor }}</span>
+                    <span>{{ div.comercio }}</span>
                     <span v-if="div.distancia_km !== null" class="opt-distancia">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
                       {{ labelDistancia(div.distancia_km) }}
                     </span>
                   </div>
@@ -379,26 +380,9 @@
                   <span>${{ formatPrecio(item.precio_unitario) }} c/u</span>
                 </div>
               </div>
-            </div>
-
-            <!-- TABLA COMPARATIVA -->
-            <div class="opt-tabla">
-              <h4>Comparación por proveedor</h4>
-              <div class="opt-tabla-header">
-                <span>Proveedor</span><span>Total</span><span>Prod.</span>
-              </div>
-              <div
-                v-for="(prov, idx) in optimizacion.proveedores"
-                :key="prov.proveedor"
-                class="opt-tabla-row"
-                :class="{ 'opt-ganador': idx === 0 }"
-              >
-                <div class="opt-prov-con-distancia">
-                  <span class="opt-nombre">{{ prov.proveedor }}</span>
-                  <span v-if="prov.distancia_km !== null" class="opt-distancia-sm">{{ labelDistancia(prov.distancia_km) }}</span>
-                </div>
-                <span class="opt-monto">${{ formatPrecio(prov.total) }}</span>
-                <span class="opt-cantidad">{{ prov.items_encontrados }}/{{ optimizacion.items_count }}</span>
+              <div class="opt-div-total-row">
+                <span>Total dividido</span>
+                <span class="opt-total-footer">${{ formatPrecio(optimizacion.division_sugerida.total) }}</span>
               </div>
             </div>
 
@@ -423,6 +407,7 @@ interface Producto {
   imagen_prod: string | null
   unidad_prod: string
   cantidad_prod: number
+  fecha_prod?: string | null
 }
 
 interface Item {
@@ -479,6 +464,39 @@ const inputNombre = ref<HTMLInputElement>()
 const mostrarBuscador = ref(false)
 const queryProducto = ref('')
 const productosBuscados = ref<Producto[]>([])
+const sortBy = ref<'precio' | 'fecha' | 'precio-fecha'>('precio')
+
+function esProductoViejo(prod: Producto): boolean {
+  if (!prod.fecha_prod) return false
+  const hace7dias = new Date()
+  hace7dias.setDate(hace7dias.getDate() - 7)
+  return new Date(prod.fecha_prod) < hace7dias
+}
+
+function setSortBy(modo: 'precio' | 'fecha' | 'precio-fecha') {
+  sortBy.value = modo
+}
+
+const productosBuscadosOrdenados = computed(() => {
+  const lista = [...productosBuscados.value]
+  if (sortBy.value === 'precio') {
+    return lista.sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+  }
+  if (sortBy.value === 'fecha') {
+    return lista.sort((a, b) => {
+      const fa = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
+      const fb = b.fecha_prod ? new Date(b.fecha_prod).getTime() : 0
+      return fb - fa // más reciente primero
+    })
+  }
+  if (sortBy.value === 'precio-fecha') {
+    // Primero los no viejos ordenados por precio, luego los viejos
+    const frescos = lista.filter(p => !esProductoViejo(p)).sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+    const viejos = lista.filter(p => esProductoViejo(p)).sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+    return [...frescos, ...viejos]
+  }
+  return lista
+})
 const loadingProductos = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout>
 
@@ -492,6 +510,25 @@ const loadingOptimizador = ref(false)
 const optimizacion = ref<any>(null)
 const userLat = ref<number | null>(null)
 const userLng = ref<number | null>(null)
+const optSort = ref<'precio' | 'distancia'>('precio')
+
+const comerciosOrdenados = computed(() => {
+  if (!optimizacion.value?.comercios) return []
+  // Normalizar: el backend usa 'comercio', el frontend usa 'proveedor'
+  const lista = optimizacion.value.comercios.map((c: any) => ({
+    ...c,
+    proveedor: c.comercio || c.proveedor,
+  }))
+  if (optSort.value === 'distancia') {
+    return [...lista].sort((a, b) => {
+      const da = a.distancia_km ?? Infinity
+      const db_ = b.distancia_km ?? Infinity
+      return da - db_
+    })
+  }
+  // Por precio: primero más cobertura, luego menor precio
+  return [...lista].sort((a, b) => b.items_encontrados - a.items_encontrados || a.total - b.total)
+})
 
 // Obtener ubicación del usuario al abrir el optimizador
 function obtenerUbicacion(): Promise<void> {
@@ -778,144 +815,6 @@ onMounted(cargar)
   }
 }
 
-.opt-resumen {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-}
-
-.opt-card {
-  padding: 1rem;
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.opt-mejor {
-  background: rgba(52, 211, 153, 0.08);
-  border: 1px solid rgba(52, 211, 153, 0.2);
-}
-
-.opt-division {
-  background: rgba(232, 196, 160, 0.08);
-  border: 1px solid rgba(232, 196, 160, 0.2);
-}
-
-.opt-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.opt-proveedor {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #34d399;
-}
-
-.opt-total {
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.opt-total-division {
-  color: var(--accent-gold);
-}
-
-.opt-ahorro {
-  font-size: 0.78rem;
-  color: #34d399;
-}
-
-.opt-ahorro-division {
-  color: var(--accent-gold);
-  font-weight: 600;
-}
-
-.opt-incompleto {
-  font-size: 0.75rem;
-  color: #fb7185;
-}
-
-.opt-tabla {
-  margin-bottom: 1.25rem;
-}
-
-.opt-tabla h4, .opt-division-detalle h4 {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 0.5rem;
-}
-
-.opt-tabla-header, .opt-tabla-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 1rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8rem;
-}
-
-.opt-tabla-header {
-  color: var(--text-muted);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.opt-tabla-row {
-  color: var(--text-secondary);
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
-.opt-tabla-row.opt-ganador {
-  background: rgba(52, 211, 153, 0.06);
-  border-radius: var(--radius-sm);
-}
-
-.opt-nombre { color: var(--text-primary); font-weight: 500; }
-.opt-monto { font-weight: 600; color: var(--accent-gold); }
-.opt-cantidad { color: var(--text-muted); }
-
-.opt-division-detalle {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.opt-division-grupo {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem;
-}
-
-.opt-division-header {
-  display: flex;
-  justify-content: space-between;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.opt-division-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  padding: 0.2rem 0;
-}
-
-@media (max-width: 480px) {
-  .opt-resumen { grid-template-columns: 1fr; }
-}
-
 @keyframes fadeInUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .animate-fade-in-up { opacity:0; animation: fadeInUp 0.5s ease-out forwards; }
@@ -956,6 +855,7 @@ onMounted(cargar)
 .progress-pct { color:var(--accent-gold); font-weight:600; }
 .progress-track { height:4px; background:rgba(255,255,255,0.06); border-radius:999px; overflow:hidden; }
 .progress-fill { height:100%; background:var(--accent-gold); border-radius:999px; transition:width 0.4s ease; }
+.progress-hint { font-size:0.7rem; color:var(--text-muted); font-style:italic; }
 
 /* FILTROS */
 .filter-chips { display:flex; gap:0.5rem; flex-wrap:wrap; }
@@ -996,7 +896,6 @@ onMounted(cargar)
 .item-estado-btn:hover { background:rgba(232,196,160,0.1); border-color:var(--border-glow); }
 .item-info { flex:1; min-width:0; }
 .item-nombre { color:var(--text-primary); font-size:0.9rem; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
 .item-meta { display:flex; align-items:center; gap:0.5rem; margin-top:0.25rem; flex-wrap:wrap; }
 .item-cantidad { color:var(--text-secondary); font-size:0.78rem; }
 .item-marca { color:var(--text-muted); font-size:0.78rem; }
@@ -1036,20 +935,17 @@ onMounted(cargar)
 /* LOADING */
 .loading-spinner {
   width:28px; height:28px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.08);
-  border-top-color:var(--accent-gold);
+  border:2px solid rgba(255,255,255,0.08); border-top-color:var(--accent-gold);
   animation:spin 0.8s linear infinite;
 }
 .loading-spinner-sm {
   width:20px; height:20px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.08);
-  border-top-color:var(--accent-gold);
+  border:2px solid rgba(255,255,255,0.08); border-top-color:var(--accent-gold);
   animation:spin 0.8s linear infinite;
 }
 .btn-spinner {
   width:16px; height:16px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.2);
-  border-top-color:#fff;
+  border:2px solid rgba(255,255,255,0.2); border-top-color:#fff;
   animation:spin 0.6s linear infinite;
 }
 
@@ -1057,49 +953,34 @@ onMounted(cargar)
 .btn-agregar {
   display:flex; align-items:center; justify-content:center; gap:0.5rem;
   padding:0.875rem 1rem;
-  background:var(--accent-gold); color:var(--text-primary);
+  background:#F5F0E8; color:#1a1410;
   border:none; border-radius:var(--radius-md);
   font-size:0.9rem; font-weight:700;
   cursor:pointer; transition:all 0.25s;
   position:sticky; bottom:1rem;
-  box-shadow:0 4px 20px rgba(232,196,160,0.25);
+  box-shadow:0 4px 20px rgba(245,240,232,0.2);
 }
-.btn-agregar:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(232,196,160,0.35); }
+.btn-agregar:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(245,240,232,0.3); filter:brightness(0.96); }
 .btn-agregar:active { transform:translateY(0); }
 
 /* MODALS */
 .modal-overlay {
   position:fixed; inset:0; z-index:100;
-  background:rgba(0,0,0,0.7);
-  backdrop-filter:blur(8px);
+  background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
   display:flex; align-items:flex-end; justify-content:center;
-  padding:0;
-  animation:fadeIn 0.2s ease;
+  padding:0; animation:fadeIn 0.2s ease;
 }
 .modal-buscador-overlay { align-items:flex-start; padding-top:4rem; }
 .modal-config-overlay { align-items:center; padding:1rem; }
-.modal-optimizador-overlay {
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 1rem !important;
-}
-.modal-optimizador-overlay .modal-optimizador {
-  border-radius: var(--radius-lg) !important;
-  margin: auto;
-  width: 100%;
-  max-width: 520px;
-  max-height: 85vh;
-}
+.modal-optimizador-overlay { align-items:center !important; justify-content:center !important; padding:1rem !important; }
+.modal-optimizador-overlay .modal-optimizador { border-radius:var(--radius-lg) !important; margin:auto; width:100%; max-width:520px; max-height:85vh; }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 
 .modal-card {
-  background:#12121a;
-  border:1px solid var(--border-subtle);
+  background:#12121a; border:1px solid var(--border-subtle);
   border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-  width:100%; max-width:560px;
-  max-height:85vh;
-  display:flex; flex-direction:column;
-  animation:slideUp 0.3s ease;
+  width:100%; max-width:560px; max-height:85vh;
+  display:flex; flex-direction:column; animation:slideUp 0.3s ease;
 }
 .modal-buscador-overlay .modal-card { border-radius:var(--radius-lg); max-height:70vh; }
 .modal-config-overlay .modal-card { border-radius:var(--radius-lg); max-height:none; }
@@ -1107,8 +988,7 @@ onMounted(cargar)
 
 .modal-header {
   display:flex; align-items:center; justify-content:space-between;
-  padding:1.25rem 1.25rem 0.75rem;
-  border-bottom:1px solid var(--border-subtle);
+  padding:1.25rem 1.25rem 0.75rem; border-bottom:1px solid var(--border-subtle);
 }
 .modal-title { margin:0; font-size:1.1rem; font-weight:700; color:var(--text-primary); }
 .modal-close {
@@ -1122,52 +1002,51 @@ onMounted(cargar)
 /* SEARCH */
 .search-bar {
   display:flex; align-items:center; gap:0.75rem;
-  padding:0.875rem 1.25rem;
-  border-bottom:1px solid var(--border-subtle);
+  padding:0.875rem 1.25rem; border-bottom:1px solid var(--border-subtle);
 }
 .search-input {
-  flex:1; background:transparent; border:none;
-  color:var(--text-primary); font-size:0.95rem;
-  outline:none;
+  flex:1; min-width:0; background:transparent; border:none;
+  color:var(--text-primary); font-size:0.95rem; outline:none;
 }
 .search-input::placeholder { color:var(--text-muted); }
 
-/* PRODUCTOS LISTA */
-.productos-lista {
-  overflow-y:auto; flex:1;
-  padding:0.5rem 0;
-}
+/* PRODUCTOS LISTA (modal buscar) */
+.productos-lista { overflow-y:auto; flex:1; padding:0.5rem 0; }
 .producto-row {
   display:flex; align-items:center; gap:0.875rem;
-  padding:0.75rem 1.25rem;
-  cursor:pointer; transition:all 0.15s;
+  padding:0.75rem 1.25rem; cursor:pointer; transition:all 0.15s;
 }
 .producto-row:hover { background:rgba(255,255,255,0.04); }
+.producto-row--viejo { opacity:0.75; }
 .prod-img {
-  width:44px; height:44px; border-radius:var(--radius-sm);
-  object-fit:cover; background:rgba(255,255,255,0.04);
-  border:1px solid var(--border-subtle);
+  width:44px; height:44px; border-radius:var(--radius-sm); flex-shrink:0;
+  object-fit:cover; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle);
 }
 .prod-info { flex:1; min-width:0; }
 .prod-nombre { color:var(--text-primary); font-size:0.9rem; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .prod-meta { color:var(--text-muted); font-size:0.75rem; margin:0.15rem 0 0; }
+.prod-aviso { color:#fbbf24; font-size:0.7rem; margin:0.2rem 0 0; }
 .prod-precio { color:var(--accent-gold); font-size:0.9rem; font-weight:700; flex-shrink:0; }
 
-/* FORM */
-.form-row { display:flex; gap:0.75rem; }
-.form-row .field-group { flex:1; }
-.field-group {
-  display:flex; flex-direction:column; gap:0.375rem;
-  padding:0 1.25rem; margin-bottom:0.875rem;
+/* Sort bar (modal buscar) */
+.sort-bar { display:flex; align-items:center; gap:0.4rem; padding:0.5rem 1.25rem; flex-wrap:wrap; }
+.sort-label { font-size:0.72rem; color:var(--text-muted); flex-shrink:0; }
+.sort-chip {
+  padding:0.25rem 0.65rem; border-radius:999px; border:1px solid var(--border-subtle);
+  background:rgba(255,255,255,0.03); color:var(--text-secondary); font-size:0.72rem;
+  cursor:pointer; transition:all 0.15s;
 }
+.sort-chip.active { border-color:var(--border-glow); color:var(--accent-gold); background:rgba(232,196,160,0.08); }
+
+/* FORM */
+.form-row { display:flex; gap:0.75rem; padding:0 1.25rem; margin-bottom:0.875rem; }
+.form-row .field-group { flex:1; padding:0; margin-bottom:0; }
+.field-group { display:flex; flex-direction:column; gap:0.375rem; padding:0 1.25rem; margin-bottom:0.875rem; }
 .field-label { font-size:0.8rem; font-weight:600; color:var(--text-secondary); }
 .field-input {
-  background:rgba(255,255,255,0.04);
-  border:1px solid var(--border-subtle);
-  border-radius:var(--radius-sm);
-  padding:0.625rem 0.875rem;
-  color:var(--text-primary); font-size:0.9rem;
-  outline:none; transition:all 0.2s;
+  width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm); padding:0.625rem 0.875rem;
+  color:var(--text-primary); font-size:0.9rem; outline:none; transition:all 0.2s;
 }
 .field-input:focus { border-color:var(--border-glow); background:rgba(255,255,255,0.06); }
 .field-input::placeholder { color:var(--text-muted); }
@@ -1175,10 +1054,8 @@ onMounted(cargar)
 /* PRIORITY CHIPS */
 .priority-chips { display:flex; gap:0.5rem; flex-wrap:wrap; }
 .priority-chip {
-  padding:0.4rem 0.75rem; border-radius:999px;
-  border:1px solid var(--border-subtle);
-  background:rgba(255,255,255,0.03);
-  color:var(--text-secondary); font-size:0.8rem; font-weight:500;
+  padding:0.4rem 0.75rem; border-radius:999px; border:1px solid var(--border-subtle);
+  background:rgba(255,255,255,0.03); color:var(--text-secondary); font-size:0.8rem; font-weight:500;
   cursor:pointer; transition:all 0.2s;
 }
 .priority-chip.active { border-color:currentColor; background:rgba(255,255,255,0.08); }
@@ -1192,11 +1069,8 @@ onMounted(cargar)
 /* TOGGLE */
 .toggle-label {
   display:flex; align-items:center; justify-content:space-between;
-  padding:0.75rem 1.25rem;
-  background:rgba(255,255,255,0.02);
-  border:1px solid var(--border-subtle);
-  border-radius:var(--radius-sm);
-  cursor:pointer;
+  padding:0.75rem 1.25rem; background:rgba(255,255,255,0.02);
+  border:1px solid var(--border-subtle); border-radius:var(--radius-sm); cursor:pointer;
 }
 .toggle-desc { font-size:0.75rem; color:var(--text-muted); margin:0.15rem 0 0; }
 .toggle-switch {
@@ -1215,224 +1089,132 @@ onMounted(cargar)
 /* MODAL ACTIONS */
 .modal-actions {
   display:flex; gap:0.75rem; justify-content:flex-end;
-  padding:1rem 1.25rem 1.25rem;
-  border-top:1px solid var(--border-subtle);
+  padding:1rem 1.25rem 1.25rem; border-top:1px solid var(--border-subtle);
 }
 .btn-cancel {
-  padding:0.625rem 1.25rem;
-  background:transparent; border:1px solid var(--border-subtle);
-  border-radius:var(--radius-sm);
-  color:var(--text-secondary); font-size:0.85rem; font-weight:600;
+  padding:0.625rem 1.25rem; background:transparent; border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm); color:var(--text-secondary); font-size:0.85rem; font-weight:600;
   cursor:pointer; transition:all 0.2s;
 }
 .btn-cancel:hover { background:rgba(255,255,255,0.04); color:var(--text-primary); }
 .btn-gold {
   display:flex; align-items:center; gap:0.5rem;
-  padding:0.625rem 1.5rem;
-  background:var(--accent-gold); border:none;
-  border-radius:var(--radius-sm);
-  color:#1a1a1a; font-size:0.85rem; font-weight:700;
+  padding:0.625rem 1.5rem; background:var(--accent-gold); border:none;
+  border-radius:var(--radius-sm); color:#1a1a1a; font-size:0.85rem; font-weight:700;
   cursor:pointer; transition:all 0.2s;
 }
 .btn-gold:hover { filter:brightness(1.1); }
 .btn-gold:disabled { opacity:0.6; cursor:not-allowed; }
 
-/* ── Optimizador rediseñado ── */
-.opt-bloque-principal {
-  background: rgba(52,211,153,0.06);
-  border: 1px solid rgba(52,211,153,0.2);
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.opt-bloque-header { display: flex; flex-direction: column; gap: 0.3rem; }
-.opt-label-tag {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  padding: 0.2rem 0.6rem;
-  border-radius: 20px;
-  width: fit-content;
-  margin-bottom: 0.2rem;
-}
-.opt-tag-verde  { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
-.opt-tag-gris   { background: rgba(148,163,184,0.12); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
-.opt-tag-dorado { background: rgba(232,196,160,0.12); color: var(--accent-gold); border: 1px solid rgba(232,196,160,0.25); }
-
-.opt-bloque-proveedor { font-size: 1rem; font-weight: 700; color: #34d399; }
-.opt-bloque-total { font-size: 1.6rem; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
-.opt-bloque-ahorro { font-size: 0.78rem; color: #34d399; }
-
-/* Faltantes — dentro del bloque principal, separados */
-.opt-faltantes {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px dashed rgba(255,255,255,0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-.opt-faltantes-sep {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.2rem;
-}
-.opt-faltantes-row { display: flex; justify-content: space-between; align-items: baseline; }
-.opt-faltantes-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
-.opt-faltantes-total { font-size: 0.95rem; font-weight: 700; color: var(--accent-gold); }
-.opt-faltantes-item {
-  display: flex; justify-content: space-between;
-  font-size: 0.78rem; color: var(--text-secondary);
-  padding: 0.2rem 0;
-}
-.opt-completo-tag {
-  margin-top: 0.5rem;
-  font-size: 0.78rem; color: #34d399;
-  display: flex; align-items: center; gap: 0.3rem;
+@media (min-width: 481px) {
+  .modal-optimizador { max-height: 75vh; border-radius: var(--radius-lg); }
 }
 
-/* Alternativa completa */
-.opt-bloque-alternativa {
-  background: rgba(148,163,184,0.05);
-  border: 1px solid rgba(148,163,184,0.15);
-  border-radius: var(--radius-md);
-  padding: 0.875rem 1rem;
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+/* ── OPTIMIZADOR REDISEÑADO ── */
+.opt-sin-precio {
+  display:flex; align-items:center; gap:0.5rem;
+  padding:0.6rem 0.875rem;
+  background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25);
+  border-radius:var(--radius-sm); font-size:0.78rem; color:#fbbf24;
+  margin-bottom:0.75rem;
 }
-.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
-.opt-alt-total { font-size: 1.2rem; font-weight: 700; color: var(--text-secondary); }
-.opt-alt-diff { font-size: 0.75rem; color: var(--text-muted); }
+.opt-sort-bar {
+  display:flex; align-items:center; gap:0.5rem; margin-bottom:0.875rem; flex-wrap:wrap;
+}
+.opt-sort-label { font-size:0.72rem; color:var(--text-muted); flex-shrink:0; }
+.opt-sort-chip {
+  padding:0.3rem 0.75rem; border-radius:999px;
+  border:1px solid var(--border-subtle);
+  background:rgba(255,255,255,0.03);
+  color:var(--text-secondary); font-size:0.78rem;
+  cursor:pointer; transition:all 0.15s;
+}
+.opt-sort-chip.active { border-color:var(--border-glow); color:var(--accent-gold); background:rgba(232,196,160,0.08); }
 
-/* División */
+.opt-comercios-lista { display:flex; flex-direction:column; gap:0.75rem; }
+
+.opt-comercio-bloque {
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+  overflow:hidden;
+}
+.opt-comercio-bloque--ganador { border-color:rgba(52,211,153,0.35); background:rgba(52,211,153,0.04); }
+
+.opt-comercio-header { padding:0.75rem 1rem; }
+.opt-comercio-nombre-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem; flex-wrap:wrap; }
+.opt-tag {
+  font-size:0.63rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+  padding:0.15rem 0.5rem; border-radius:20px;
+}
+.opt-tag-verde  { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); }
+.opt-tag-gris   { background:rgba(255,255,255,0.06); color:var(--text-muted); border:1px solid var(--border-subtle); }
+.opt-comercio-nombre { font-size:0.95rem; font-weight:700; color:var(--text-primary); }
+.opt-comercio-meta { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; }
+.opt-total { font-size:1.1rem; font-weight:800; color:var(--text-primary); }
+.opt-cobertura { font-size:0.72rem; color:var(--text-muted); }
+
+.opt-productos-lista { border-top:1px solid var(--border-subtle); padding:0.5rem 0; }
+.opt-prod-row {
+  display:flex; align-items:baseline; gap:0.5rem;
+  padding:0.35rem 1rem; font-size:0.8rem;
+}
+.opt-prod-nombre { flex:1; color:var(--text-secondary); }
+.opt-prod-detalle { color:var(--text-muted); flex-shrink:0; }
+.opt-prod-precio { color:var(--accent-gold); font-weight:600; flex-shrink:0; }
+.opt-prod-precio--viejo { color:rgba(232,196,160,0.45); }
+.opt-viejo-tag { font-size:0.65rem; color:#fbbf24; margin-left:0.25rem; }
+.opt-prod-faltante { opacity:0.6; }
+.opt-prod-faltante-tag { font-size:0.67rem; color:#fb7185; flex-shrink:0; }
+
+.opt-comercio-footer {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:0.5rem 1rem;
+  border-top:1px solid var(--border-subtle);
+  background:rgba(255,255,255,0.02);
+  font-size:0.78rem; color:var(--text-muted);
+}
+.opt-total-footer { font-weight:700; color:var(--text-primary); font-size:0.9rem; }
+
+/* División óptima */
 .opt-bloque-division {
-  background: rgba(232,196,160,0.06);
-  border: 1px solid rgba(232,196,160,0.18);
-  border-radius: var(--radius-md);
-  padding: 0.875rem 1rem;
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  background:rgba(232,196,160,0.06); border:1px solid rgba(232,196,160,0.18);
+  border-radius:var(--radius-md); padding:0.875rem 1rem;
+  margin-top:0.75rem; display:flex; flex-direction:column; gap:0.35rem;
 }
-.opt-div-total { font-size: 1.4rem; font-weight: 800; color: var(--accent-gold); }
-.opt-div-ahorro { font-size: 0.78rem; color: var(--accent-gold); font-weight: 600; }
-.opt-div-grupo {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255,255,255,0.06);
+.opt-label-tag {
+  display:inline-block; font-size:0.65rem; font-weight:700; letter-spacing:0.06em;
+  text-transform:uppercase; padding:0.2rem 0.6rem; border-radius:20px; width:fit-content;
 }
+.opt-tag-dorado { background:rgba(232,196,160,0.12); color:var(--accent-gold); border:1px solid rgba(232,196,160,0.25); }
+.opt-div-grupo { margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid rgba(255,255,255,0.06); }
 .opt-div-grupo-header {
-  display: flex; justify-content: space-between;
-  font-size: 0.85rem; font-weight: 600;
-  color: var(--text-primary); margin-bottom: 0.25rem;
+  display:flex; justify-content:space-between;
+  font-size:0.85rem; font-weight:600; color:var(--text-primary); margin-bottom:0.25rem;
 }
 .opt-div-item {
-  display: flex; justify-content: space-between;
-  font-size: 0.75rem; color: var(--text-secondary);
-  padding: 0.15rem 0;
+  display:flex; justify-content:space-between;
+  font-size:0.75rem; color:var(--text-secondary); padding:0.15rem 0;
+}
+.opt-div-total-row {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:0.5rem; padding-top:0.5rem;
+  border-top:1px solid rgba(255,255,255,0.06);
+  font-size:0.8rem; color:var(--text-muted);
 }
 
-
-/* ── Layout de dos columnas para bloques del optimizador ── */
-.opt-bloque-principal,
-.opt-bloque-faltantes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-}
-.opt-bloque-principal { background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.2); }
-.opt-bloque-faltantes { background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2); }
-
-.opt-col-resumen,
-.opt-faltantes-col-resumen {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  border-right: 1px solid rgba(255,255,255,0.06);
-}
-
-.opt-col-productos {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.opt-col-titulo {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-muted);
-  margin-bottom: 0.3rem;
-  font-weight: 600;
-}
-
-.opt-prod-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 0.78rem;
-  padding: 0.2rem 0;
-  border-bottom: 0.5px solid rgba(255,255,255,0.04);
-  gap: 6px;
-}
-.opt-prod-row:last-child { border-bottom: none; }
-.opt-prod-nombre { color: var(--text-secondary); flex: 1; }
-.opt-prod-precio { color: var(--accent-gold); font-weight: 600; white-space: nowrap; }
-
+/* Distancia */
 .opt-distancia {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.72rem;
-  color: var(--text-muted);
+  display:flex; align-items:center; gap:3px;
+  font-size:0.72rem; color:var(--text-muted);
 }
-.opt-distancia-sm {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-}
-.opt-prov-con-distancia {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
+.opt-prov-con-distancia { display:flex; flex-direction:column; gap:1px; }
 
-.opt-alt-fila {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.opt-alt-proveedor { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
-.opt-alt-total { font-size: 1rem; font-weight: 700; color: var(--text-secondary); margin-left: auto; }
-
-/* Naranja para faltantes */
-.opt-tag-naranja { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-
-/* item-proveedor-row en la lista */
+/* Item proveedor en la lista */
 .item-proveedor-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-top: 2px;
+  display:flex; align-items:center; gap:4px;
+  font-size:0.72rem; color:var(--text-muted); margin-top:2px;
 }
-.item-proveedor-nombre { color: var(--text-secondary); font-weight: 500; }
-.item-distancia { color: var(--text-muted); }
+.item-proveedor-nombre { color:var(--text-secondary); font-weight:500; }
+.item-distancia { color:var(--text-muted); }
 
 </style>

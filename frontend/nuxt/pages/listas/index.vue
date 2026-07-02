@@ -159,12 +159,24 @@ function formatFecha(iso: string): string {
 }
 
 async function cargarListas() {
+  // Guard: si no hay sesión activa, redirigir al login en vez de tirar 401
+  const stored = typeof window !== 'undefined' ? localStorage.getItem('comparapp_user') : null
+  if (!stored) {
+    navigateTo('/login')
+    return
+  }
+
   loading.value = true
   errorMsg.value = ''
   try {
     const res = await api<{ count: number; results: Lista[] }>('/listas')
     listas.value = res.results || []
   } catch (err: any) {
+    // 401 = sesión vencida — redirigir al login en vez de mostrar error
+    if (err?.status === 401 || err?.statusCode === 401) {
+      navigateTo('/login')
+      return
+    }
     errorMsg.value = err?.data?.detail || err?.message || 'Error al cargar listas'
   } finally {
     loading.value = false

@@ -472,7 +472,7 @@ onUnmounted(() => {
    ============================================ */
 .skip-btn {
   position: absolute;
-  top: clamp(0.75rem, 2.5vh, 1.5rem);
+  top: clamp(1.75rem, 4.5vh, 2.5rem);
   right: clamp(0.75rem, 2.5vw, 1.5rem);
   display: flex;
   align-items: center;

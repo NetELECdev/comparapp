@@ -64,6 +64,51 @@ class DatabaseManager:
         self.supabase = DatabaseManager._shared_supabase
 
 
+class DatabaseManager:
+    # Recursos PESADOS y seguros de compartir entre requests: el cliente de
+    # Supabase no guarda en sí mismo a qué usuario pertenece cada consulta
+    # (eso se arma en cada query con .eq(...), .select(...), etc., usando
+    # siempre la misma service_role key). Por eso es seguro tenerlo como
+    # recurso de clase, creado UNA sola vez, y no por cada request — evita
+    # el costo de abrir una conexión HTTP nueva en cada llamada a la API.
+    _shared_supabase: Optional[Client] = None
+    _shared_session: Optional[requests.Session] = None
+
+    def __init__(self):
+        # current_user es SIEMPRE de instancia (nunca de clase). Antes
+        # main.py reusaba una única instancia global de DatabaseManager
+        # para TODOS los requests del servidor: dos personas usando la app
+        # casi al mismo tiempo podían pisarse el current_user entre sí,
+        # viendo o modificando datos del otro. Ahora get_db() (en main.py)
+        # crea una instancia nueva por request, así cada una tiene su
+        # propio current_user — pero comparten el mismo cliente de Supabase
+        # de abajo, así que no se paga el costo de recrearlo cada vez.
+        self.current_user = None
+
+        if DatabaseManager._shared_supabase is None:
+            DatabaseManager._shared_session = requests.Session()
+            url = SupabaseConfig.get_url()
+            # Service role key — bypasea RLS para todas las operaciones del backend
+            key = SupabaseConfig.get_service_key()
+            DatabaseManager._shared_supabase = create_client(url, key)
+
+            # Diagnóstico: confirmar qué rol tiene realmente la key cargada (sin loguear la key).
+            # Si esto imprime 'anon' en vez de 'service_role', el .env tiene SUPABASE_SERVICE_KEY
+            # mal puesta (o vacía) y por eso las subidas a Storage chocan con RLS.
+            # Se imprime una sola vez (al primer request), no en cada uno.
+            try:
+                import base64 as _b64
+                payload_b64 = key.split('.')[1]
+                payload_b64 += '=' * (-len(payload_b64) % 4)
+                rol_key = json.loads(_b64.urlsafe_b64decode(payload_b64)).get('role', '?')
+                print(f"🔑 Supabase client iniciado con role: {rol_key}")
+            except Exception:
+                print("🔑 No se pudo decodificar el role de la key (revisar formato)")
+
+        self.session = DatabaseManager._shared_session
+        self.supabase = DatabaseManager._shared_supabase
+
+
 
     def _parse_wkb_point(self, wkb_hex: str) -> dict:
         try:

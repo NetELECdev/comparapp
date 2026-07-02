@@ -271,10 +271,19 @@ def google_oauth_callback(
         return {
             "message": "Login con Google exitoso",
             "user": {
-                "id": supabase_user_id,
+                "id": user_data.get("id_user") or supabase_user_id,
+                "id_user": user_data.get("id_user") or supabase_user_id,
                 "email": user_email,
+                "email_user": user_email,
                 "nombre_completo": nombre_final,
+                "nombre_completo_user": nombre_final,
                 "rol": user_data.get("rol_user", "usuario"),
+                "rol_user": user_data.get("rol_user", "usuario"),
+                "avatar_url_user": user_data.get("avatar_url_user"),
+                "es_comercio_user": user_data.get("es_comercio_user", False),
+                "comercio_verificado_user": user_data.get("comercio_verificado_user", False),
+                "id_comer": user_data.get("id_comer"),
+                "activo_user": user_data.get("activo_user", True),
                 "access_token": access_token
             }
         }
@@ -1482,20 +1491,35 @@ def optimize_lista(
 
         # 3. Para cada item, buscar productos coincidentes
         productos_por_item = {}
+        items_sin_precio = []   # productos que no tienen ningún precio en la BD
         todos_comercios = set()
+        HACE_7_DIAS = (datetime.now() - timedelta(days=7)).isoformat()
 
         for item in items:
             nombre_item = item.get('nombre_item', '').strip()
             if not nombre_item:
                 continue
             prod_res = db.supabase.table('producto')\
-                .select('id_prod, nombre_prod, precio_prod, comercio_prod, marca_prod, unidad_prod, cantidad_prod')\
+                .select('id_prod, nombre_prod, precio_prod, comercio_prod, marca_prod, unidad_prod, cantidad_prod, fecha_prod')\
                 .eq('activo_prod', True)\
                 .ilike('nombre_prod', f'%{nombre_item}%')\
                 .execute()
             productos = prod_res.data or []
-            productos_por_item[item['id_item']] = productos
-            for p in productos:
+
+            # Separar frescos (≤7 días) de antiguos (>7 días)
+            frescos = [p for p in productos if p.get('fecha_prod') and p['fecha_prod'] >= HACE_7_DIAS]
+            antiguos = [p for p in productos if p not in frescos]
+
+            # Usar frescos si los hay; si no, usar antiguos marcándolos
+            usar = frescos if frescos else antiguos
+            for p in usar:
+                p['_precio_viejo'] = p not in frescos
+
+            if not usar:
+                items_sin_precio.append(nombre_item)
+
+            productos_por_item[item['id_item']] = usar
+            for p in usar:
                 todos_comercios.add(p.get('comercio_prod', 'Desconocido'))
 
         # 4. Calcular costo por comercio con detalle de productos
@@ -1525,7 +1549,8 @@ def optimize_lista(
                         "nombre": item['nombre_item'],
                         "cantidad": cantidad,
                         "precio_unitario": precio,
-                        "subtotal": round(precio * cantidad, 2)
+                        "subtotal": round(precio * cantidad, 2),
+                        "precio_viejo": bool(producto_comercio.get('_precio_viejo'))
                     })
                 else:
                     items_faltantes.append(item['nombre_item'])
@@ -1648,6 +1673,7 @@ def optimize_lista(
         return {
             "lista_id": lista_id,
             "items_count": len(items),
+            "items_sin_precio": items_sin_precio,
             "comercios": comercios_ordenados,
             "mejor_opcion": {
                 "comercio": mejor_opcion['comercio'],

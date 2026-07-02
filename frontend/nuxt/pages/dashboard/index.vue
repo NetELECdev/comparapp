@@ -911,6 +911,13 @@ onMounted(async () => {
   object-fit: contain;
 }
 
+@media (max-width: 380px) {
+  .big-card-icon { width: 48px; height: 48px; border-radius: 10px; }
+  .big-card-label { font-size: 13px; }
+  .big-card-sub { font-size: 10.5px; }
+  .big-card { padding: 12px; min-height: 130px; }
+}
+
 .big-card-label {
   font-size: 15px; font-weight: 700;
   color: var(--text-primary);
