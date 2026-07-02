@@ -7,7 +7,7 @@ Descripcion:
     supabase_config.py y database_manager.py
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Body, UploadFile, File, Form, Request
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -16,6 +16,16 @@ from datetime import datetime, timedelta
 import time
 from collections import defaultdict
 import os
+
+# Cargar variables del .env local (si existe).
+# En producción (Render) no hay .env — las variables vienen del panel de Render.
+# python-dotenv no sobreescribe variables que ya existen en el entorno del SO,
+# así que esto es seguro de dejar siempre activo.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv no está instalado — no es crítico en producción
 
 # Importar los modulos locales
 from database_manager import DatabaseManager, LIMITE_PRODUCTOS_PLAN_FREE
@@ -48,19 +58,59 @@ class ProductResponse(BaseModel):
 # Inicializacion general
 # ---------------------------------------------------
 
+# En desarrollo (ENVIRONMENT=development en .env local), /docs y /redoc
+# quedan accesibles para explorar la API con comodidad.
+# En producción (Render no tiene esa variable), se deshabilitan — dejar
+# el mapa completo de la API público es un riesgo de seguridad innecesario.
+_env = os.getenv("ENVIRONMENT", "production").lower()
+_is_dev = _env == "development"
+
 app = FastAPI(
     title="ComparApp API",
     version="1.1.0",
-    description="API de comparacion de precios conectada a Supabase"
+    description="API de comparacion de precios conectada a Supabase",
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
+    openapi_url="/openapi.json" if _is_dev else None,
 )
 
-# Configurar CORS (importante para frontend en Nuxt o apps moviles)
+# ---------------------------------------------------
+# CORS — solo los orígenes reales del proyecto
+# ---------------------------------------------------
+# allow_origins=["*"] era demasiado permisivo: cualquier sitio web del
+# mundo podía hacer peticiones a la API usando credenciales reales de
+# un usuario. Ahora solo se aceptan los orígenes conocidos.
+# Para no hardcodear la URL de Netlify (puede cambiar de plan/dominio),
+# se usa validación dinámica: cualquier subdominio de netlify.app que
+# contenga "compar" se considera legítimo (cubre deploy previews también).
+
+_ALLOWED_ORIGINS_EXACT = {
+    "https://compar-app.netlify.app",   # producción
+    "http://localhost:3000",            # dev frontend local
+    "http://localhost:8000",            # dev backend local (por si acaso)
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
+}
+
+def _is_origin_allowed(origin: str) -> bool:
+    if origin in _ALLOWED_ORIGINS_EXACT:
+        return True
+    # Cubre deploy previews de Netlify:
+    # https://deploy-preview-123--compar-app.netlify.app
+    if origin.endswith(".netlify.app") and "compar" in origin:
+        return True
+    # En desarrollo local, permitir cualquier localhost con cualquier puerto
+    if _is_dev and (origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:")):
+        return True
+    return False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(_ALLOWED_ORIGINS_EXACT),
+    allow_origin_regex=r"https://[a-z0-9\-]+--compar-app\.netlify\.app",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 # Instancia usada solo para tareas de arranque/apagado del servidor
