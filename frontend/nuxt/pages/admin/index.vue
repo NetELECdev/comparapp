@@ -258,7 +258,10 @@
               <div class="provider-status" :class="prov.activo_comer ? 'active' : 'inactive'" />
             </div>
             <h3 class="provider-name">{{ prov.nombre_comer }}</h3>
-            <p class="provider-cat">{{ prov.cate_comer }}</p>
+            <p class="provider-cat">
+              {{ prov.cate_comer }}
+              <span v-if="prov.plan_comer === 'premium'" class="badge-rol badge-rol--admin" style="margin-left: 0.4rem;">Premium</span>
+            </p>
             <div class="provider-meta">
               <span v-if="prov.direccion_comer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -623,6 +626,17 @@
                 <input v-model="formComercio.logo_comer" placeholder="https://..." />
               </div>
               <div class="form-group">
+                <label>Plan</label>
+                <select v-model="formComercio.plan_comer">
+                  <option value="free">Gratis (hasta 10 productos)</option>
+                  <option value="premium">Premium (ilimitado)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Vence el (si es premium)</label>
+                <input v-model="formComercio.plan_vencimiento_comer" type="date" :disabled="formComercio.plan_comer !== 'premium'" />
+              </div>
+              <div class="form-group">
                 <label class="checkbox-label">
                   <input v-model="formComercio.activo_comer" type="checkbox" />
                   <span>Activo</span>
@@ -735,6 +749,8 @@ interface Comercio {
   activo_comer: boolean
   cate_comer: string
   logo_comer: string | null
+  plan_comer?: string | null
+  plan_vencimiento_comer?: string | null
 }
 
 interface Oferta {
@@ -1204,12 +1220,20 @@ async function saveProducto() {
       return
     }
     if (editingProductoId.value) {
-      await $fetch(`${config.public.apiBase}/products/${editingProductoId.value}`, { method: 'PUT', body: payload })
+      await $fetch(`${config.public.apiBase}/products/${editingProductoId.value}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       const idx = productos.value.findIndex(p => p.id_prod === editingProductoId.value)
       if (idx >= 0) productos.value[idx] = { ...productos.value[idx], ...payload, id_prod: editingProductoId.value } as Producto
       showToast('Producto actualizado')
     } else {
-      const res = await $fetch<{ data: Producto }>(`${config.public.apiBase}/products`, { method: 'POST', body: payload })
+      const res = await $fetch<{ data: Producto }>(`${config.public.apiBase}/products`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       if (res.data) productos.value.unshift(res.data)
       else await loadData()
       showToast('Producto creado')
@@ -1228,14 +1252,16 @@ const modalComercioOpen = ref(false)
 const editingComercioId = ref<string | null>(null)
 const formComercio = ref<Partial<Comercio>>({
   nombre_comer: '', direccion_comer: '', te_comer: '',
-  email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true
+  email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true,
+  plan_comer: 'free', plan_vencimiento_comer: ''
 })
 
 function openModalComercio() {
   editingComercioId.value = null
   formComercio.value = {
     nombre_comer: '', direccion_comer: '', te_comer: '',
-    email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true
+    email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true,
+    plan_comer: 'free', plan_vencimiento_comer: ''
   }
   modalComercioOpen.value = true
 }
@@ -1257,9 +1283,11 @@ async function saveComercio() {
       direccion_comer: formComercio.value.direccion_comer?.trim() || null,
       te_comer: formComercio.value.te_comer?.trim() || null,
       email_comer: formComercio.value.email_comer?.trim() || null,
-      representa_comer: formComercio.value.representa_comer?.trim() || null,
+      representa_comer: formComercio.value.representa_comer?.trim() || '',
       logo_comer: formComercio.value.logo_comer?.trim() || null,
       activo_comer: !!formComercio.value.activo_comer,
+      plan_comer: formComercio.value.plan_comer || 'free',
+      plan_vencimiento_comer: formComercio.value.plan_vencimiento_comer || null,
       fechaIngreso_comer: new Date().toISOString().split('T')[0]
     }
     if (!payload.nombre_comer) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
