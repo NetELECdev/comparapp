@@ -224,45 +224,47 @@ async def change_password(
     authorization: Optional[str] = Header(None),
     db: DatabaseManager = Depends(get_db)
 ):
-    """
-    Cambia la contraseña del usuario autenticado.
-    Solo disponible para cuentas de email/contraseña — las cuentas de Google
-    no tienen contraseña gestionada por ComparApp.
-    """
     set_user_from_token(db, authorization)
     if not db.current_user:
         raise HTTPException(status_code=401, detail="No autenticado")
 
     if len(password_nueva) < 6:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
-
     if password_actual == password_nueva:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser distinta a la actual")
 
     try:
-        # 1. Verificar la contraseña actual intentando un login
-        email_user = db.current_user.get("email") or db.current_user.get("email_user", "")
-        if not email_user:
-            raise HTTPException(status_code=400, detail="No se pudo verificar tu identidad. Cerrá sesión y volvé a entrar.")
-
-        verificacion = db.supabase.auth.sign_in_with_password({
-            "email": email_user,
-            "password": password_actual
-        })
-        if not verificacion.user:
-            raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
-
-        # 2. Cambiar la contraseña usando el token activo del usuario
+        # Obtener el email directamente del token (no de current_user, que no lo guarda)
         token = authorization.replace("Bearer ", "") if authorization else ""
+        auth_user = db.supabase.auth.get_user(token)
+        if not auth_user or not auth_user.user:
+            raise HTTPException(status_code=401, detail="Token inválido. Cerrá sesión y volvé a entrar.")
+        email_user = auth_user.user.email
+        if not email_user:
+            raise HTTPException(status_code=400, detail="Esta cuenta no tiene contraseña — usá Google para entrar.")
+
+        # Verificar la contraseña actual con un sign_in real
+        try:
+            verificacion = db.supabase.auth.sign_in_with_password({
+                "email": email_user,
+                "password": password_actual
+            })
+            if not verificacion.user:
+                raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
+        except Exception as e:
+            err = str(e).lower()
+            if "invalid" in err or "credentials" in err or "password" in err:
+                raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
+            raise HTTPException(status_code=401, detail="No se pudo verificar tu contraseña actual")
+
+        # Cambiar la contraseña — usamos el cliente con el token activo del usuario
+        db.supabase.auth._headers = {**db.supabase.auth._headers, "Authorization": f"Bearer {token}"}
         db.supabase.auth.update_user({"password": password_nueva})
 
         return {"message": "Contraseña actualizada correctamente"}
     except HTTPException:
         raise
     except Exception as e:
-        err = str(e).lower()
-        if "invalid" in err or "wrong" in err or "incorrect" in err:
-            raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta")
         raise HTTPException(status_code=500, detail="No se pudo cambiar la contraseña. Intentá de nuevo.")
 
 
