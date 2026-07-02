@@ -818,16 +818,58 @@ class DatabaseManager:
 
     # ==================== HISTÓRICO DE BÚSQUEDAS ====================
 
-    def save_search_history(self, search_term: str, search_type: str = 'general', 
+    def save_search_history(self, search_term: str, search_type: str = 'general',
                            precio_min: float = None, precio_max: float = None,
                            fecha_desde: str = None, fecha_hasta: str = None,
                            categoria: str = None, marca: str = None,
                            solo_activos: bool = True, results_count: int = 0) -> None:
-        """Guarda una búsqueda en el historial"""
+        """
+        Guarda una búsqueda en el historial con dos límites automáticos:
+        1. Máximo MAX_HISTORIAL_POR_USUARIO registros por usuario — cuando se supera,
+           se borran los más viejos antes de insertar el nuevo.
+        2. Registros con más de DIAS_RETENCIÓN días se purgan en cada guardado.
+        Esto evita que search_history crezca indefinidamente sin necesidad de
+        ningún proceso externo ni cron job.
+        """
+        MAX_HISTORIAL_POR_USUARIO = 50
+        DIAS_RETENCION = 30
+
         if not self.is_user_logged_in():
             return
         try:
             user_id = self.current_user.get('id')
+
+            # 1. Purgar registros viejos (> DIAS_RETENCION días) de este usuario
+            fecha_limite = (datetime.now() - __import__('datetime').timedelta(days=DIAS_RETENCION)).isoformat()
+            try:
+                self.supabase.table('search_history')\
+                    .delete()\
+                    .eq('user_id', user_id)\
+                    .lt('created_at', fecha_limite)\
+                    .execute()
+            except Exception:
+                pass  # No crítico — el insert sigue igual
+
+            # 2. Si el usuario supera el máximo, borrar los más viejos
+            try:
+                count_res = self.supabase.table('search_history')\
+                    .select('id, created_at')\
+                    .eq('user_id', user_id)\
+                    .order('created_at', desc=False)\
+                    .execute()
+                registros = count_res.data or []
+                if len(registros) >= MAX_HISTORIAL_POR_USUARIO:
+                    # Cuántos hay que borrar para hacer lugar al nuevo
+                    a_borrar = registros[:len(registros) - MAX_HISTORIAL_POR_USUARIO + 1]
+                    ids_a_borrar = [r['id'] for r in a_borrar]
+                    self.supabase.table('search_history')\
+                        .delete()\
+                        .in_('id', ids_a_borrar)\
+                        .execute()
+            except Exception:
+                pass  # No crítico — el insert sigue igual
+
+            # 3. Insertar la búsqueda nueva
             data = {
                 'user_id': user_id,
                 'search_term': search_term,
@@ -835,21 +877,13 @@ class DatabaseManager:
                 'solo_activos': solo_activos,
                 'results_count': results_count
             }
-            
-            # Agregar filtros opcionales
-            if precio_min is not None:
-                data['precio_min'] = precio_min
-            if precio_max is not None:
-                data['precio_max'] = precio_max
-            if fecha_desde:
-                data['fecha_desde'] = fecha_desde
-            if fecha_hasta:
-                data['fecha_hasta'] = fecha_hasta
-            if categoria:
-                data['categoria'] = categoria
-            if marca:
-                data['marca'] = marca
-                
+            if precio_min is not None: data['precio_min'] = precio_min
+            if precio_max is not None: data['precio_max'] = precio_max
+            if fecha_desde: data['fecha_desde'] = fecha_desde
+            if fecha_hasta: data['fecha_hasta'] = fecha_hasta
+            if categoria: data['categoria'] = categoria
+            if marca: data['marca'] = marca
+
             self.supabase.table('search_history').insert(data).execute()
         except Exception as e:
             print(f"Error saving search history: {e}")
