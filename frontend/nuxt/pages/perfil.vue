@@ -56,6 +56,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Editar Perfil
           </button>
+          <button v-if="!esGoogleUser" class="btn-accion btn-password" @click="mostrarModalPassword = true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Cambiar contraseña
+          </button>
           <button class="btn-accion btn-salir" @click="cerrarSesion">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Cerrar Sesión
@@ -118,11 +122,52 @@
         <span>Perfil</span>
       </button>
     </nav>
+    <!-- Modal cambio de contraseña -->
+    <Teleport to="body">
+      <div v-if="mostrarModalPassword" class="modal-overlay-perfil" @click.self="cerrarModalPassword">
+        <div class="modal-password">
+          <div class="modal-pw-header">
+            <h3>Cambiar contraseña</h3>
+            <button class="modal-pw-close" @click="cerrarModalPassword">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+          <div class="modal-pw-body">
+            <div class="pw-field">
+              <label>Contraseña actual</label>
+              <input v-model="pwActual" :type="mostrarPw ? 'text' : 'password'" placeholder="Tu contraseña actual" />
+            </div>
+            <div class="pw-field">
+              <label>Nueva contraseña</label>
+              <input v-model="pwNueva" :type="mostrarPw ? 'text' : 'password'" placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div class="pw-field">
+              <label>Repetir nueva contraseña</label>
+              <input v-model="pwNuevaRepetir" :type="mostrarPw ? 'text' : 'password'" placeholder="Repetí la nueva contraseña" />
+            </div>
+            <label class="pw-toggle-mostrar">
+              <input type="checkbox" v-model="mostrarPw" />
+              <span>Mostrar contraseñas</span>
+            </label>
+            <p v-if="pwError" class="pw-error">{{ pwError }}</p>
+            <p v-if="pwExito" class="pw-exito">{{ pwExito }}</p>
+            <div class="pw-actions">
+              <button class="pw-btn-cancelar" @click="cerrarModalPassword">Cancelar</button>
+              <button class="pw-btn-guardar" :disabled="cambiandoPw" @click="cambiarPassword">
+                {{ cambiandoPw ? 'Guardando...' : 'Guardar' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRuntimeConfig, navigateTo } from '#app'
 
 useTema()
 useBackground()
@@ -169,6 +214,74 @@ onMounted(async () => {
 function cerrarSesion() {
   localStorage.removeItem('comparapp_user')
   navigateTo('/login')
+}
+
+// ─── Cambio de contraseña ───────────────────────────────────
+const esGoogleUser = computed(() => {
+  // Si el usuario entró con Google no tiene contraseña que gestionar acá
+  const providers = user.value?.app_metadata?.providers || []
+  if (providers.includes('email')) return false
+  // Fallback: si el avatar es de Google, probablemente es cuenta Google
+  const avatar = user.value?.avatar_url || ''
+  return avatar.includes('googleusercontent.com') && !user.value?.email_user
+})
+
+const mostrarModalPassword = ref(false)
+const pwActual = ref('')
+const pwNueva = ref('')
+const pwNuevaRepetir = ref('')
+const mostrarPw = ref(false)
+const pwError = ref('')
+const pwExito = ref('')
+const cambiandoPw = ref(false)
+
+function cerrarModalPassword() {
+  mostrarModalPassword.value = false
+  pwActual.value = ''
+  pwNueva.value = ''
+  pwNuevaRepetir.value = ''
+  mostrarPw.value = false
+  pwError.value = ''
+  pwExito.value = ''
+}
+
+async function cambiarPassword() {
+  pwError.value = ''
+  pwExito.value = ''
+
+  if (!pwActual.value || !pwNueva.value || !pwNuevaRepetir.value) {
+    pwError.value = 'Completá todos los campos'
+    return
+  }
+  if (pwNueva.value.length < 6) {
+    pwError.value = 'La nueva contraseña debe tener al menos 6 caracteres'
+    return
+  }
+  if (pwNueva.value !== pwNuevaRepetir.value) {
+    pwError.value = 'Las contraseñas nuevas no coinciden'
+    return
+  }
+  if (pwActual.value === pwNueva.value) {
+    pwError.value = 'La nueva contraseña debe ser distinta a la actual'
+    return
+  }
+
+  cambiandoPw.value = true
+  try {
+    const stored = localStorage.getItem('comparapp_user')
+    const token = stored ? JSON.parse(stored).access_token : ''
+    await $fetch(`${config.public.apiBase}/change-password`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password_actual: pwActual.value, password_nueva: pwNueva.value })
+    })
+    pwExito.value = '✅ Contraseña actualizada correctamente'
+    setTimeout(cerrarModalPassword, 2000)
+  } catch (err: any) {
+    pwError.value = err?.data?.detail || 'No se pudo cambiar la contraseña. Intentá de nuevo.'
+  } finally {
+    cambiandoPw.value = false
+  }
 }
 
 function showComingSoon() {
@@ -373,4 +486,67 @@ function showComingSoon() {
   margin-top: -14px;
   box-shadow: 0 4px 16px rgba(232,196,160,0.25);
 }
+.btn-password {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.btn-password:hover { border-color: var(--border-glow); color: var(--text-primary); }
+
+/* Modal cambio de contraseña */
+.modal-overlay-perfil {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.65); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+}
+.modal-password {
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); width: 100%; max-width: 380px;
+  box-shadow: var(--shadow-modal);
+}
+.modal-pw-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.modal-pw-header h3 { margin: 0; font-size: 1rem; font-weight: 700; }
+.modal-pw-close {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: transparent; border: 1px solid var(--border-subtle);
+  color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.modal-pw-close:hover { color: var(--text-primary); border-color: var(--border-glow); }
+.modal-pw-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.875rem; }
+.pw-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.pw-field label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+.pw-field input {
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-input); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); color: var(--text-primary);
+  font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+}
+.pw-field input:focus { border-color: var(--border-glow); }
+.pw-toggle-mostrar {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
+}
+.pw-error { font-size: 0.78rem; color: var(--accent-rose); margin: 0; }
+.pw-exito { font-size: 0.78rem; color: var(--accent-emerald); margin: 0; }
+.pw-actions { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
+.pw-btn-cancelar {
+  flex: 1; padding: 0.625rem;
+  background: transparent; border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.pw-btn-cancelar:hover { border-color: var(--border-glow); color: var(--text-primary); }
+.pw-btn-guardar {
+  flex: 1; padding: 0.625rem;
+  background: var(--accent-gold); border: none;
+  border-radius: var(--radius-sm); color: #1a1410;
+  font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+}
+.pw-btn-guardar:hover { filter: brightness(1.08); }
+.pw-btn-guardar:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
