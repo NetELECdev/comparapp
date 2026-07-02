@@ -109,6 +109,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRuntimeConfig, navigateTo, useRoute } from '#app'
+import { COMPARAPP_USER_VERSION } from '~/composables/useAuth'
 
 interface LoginResponse {
   message: string
@@ -206,7 +207,8 @@ async function login() {
         comercio_verificado: response.user.comercio_verificado_user || false,
         fecha_registro: response.user.fecha_registro_user || null,
         ultima_conexion: response.user.ultima_conexion_user || null,
-        access_token: response.user.access_token || ''
+        access_token: response.user.access_token || '',
+        _v: COMPARAPP_USER_VERSION
       }
 
       localStorage.setItem('comparapp_user', JSON.stringify(userData))

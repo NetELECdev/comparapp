@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { navigateTo, useRuntimeConfig } from '#app'
+import { COMPARAPP_USER_VERSION } from '~/composables/useAuth'
 
 interface Comercio {
   id_comer: string
@@ -96,7 +97,8 @@ function mapBackendUser(raw: any, sessionUser: any, accessToken: string) {
     es_comercio: raw?.es_comercio_user ?? raw?.es_comercio ?? false,
     comercio_verificado: raw?.comercio_verificado_user ?? raw?.comercio_verificado ?? false,
     id_comer: raw?.id_comer || null,
-    access_token: accessToken
+    access_token: accessToken,
+    _v: COMPARAPP_USER_VERSION
   }
 }
 
