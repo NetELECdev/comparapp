@@ -238,15 +238,86 @@ async def register_user(
         raise HTTPException(status_code=400, detail=msg)
     return {"message": msg, "user": user_data}
 
+# ---------------------------------------------------
+# Rate limiting para /login
+# ---------------------------------------------------
+# Estructura: { ip: [(timestamp, exitoso), ...] }
+# Solo contamos intentos FALLIDOS. Un login exitoso no consume el límite.
+# Máximo: 5 intentos fallidos por IP en una ventana de 15 minutos.
+# Si se supera, el siguiente intento devuelve 429 con cuántos segundos faltan.
+
+_login_attempts: dict = defaultdict(list)
+_LOGIN_MAX_INTENTOS = 5
+_LOGIN_VENTANA_SEG = 15 * 60  # 15 minutos
+
+
+def _get_client_ip(request: Request) -> str:
+    """IP real del cliente, considerando proxies de Render/Netlify."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(ip: str) -> tuple[bool, int]:
+    """
+    Devuelve (está_bloqueada, segundos_restantes).
+    Limpia intentos viejos fuera de la ventana antes de evaluar.
+    """
+    ahora = time.time()
+    # Limpiar intentos fuera de la ventana
+    _login_attempts[ip] = [
+        t for t in _login_attempts[ip]
+        if ahora - t < _LOGIN_VENTANA_SEG
+    ]
+    fallidos = len(_login_attempts[ip])
+    if fallidos >= _LOGIN_MAX_INTENTOS:
+        mas_viejo = min(_login_attempts[ip])
+        segundos_restantes = int(_LOGIN_VENTANA_SEG - (ahora - mas_viejo))
+        return True, max(0, segundos_restantes)
+    return False, 0
+
+
 @app.post("/api/v1/login", tags=["Auth"])
 def login_user(
-    email: str = Body(...), 
-    password: str = Body(...), 
+    email: str = Body(...),
+    password: str = Body(...),
+    request: Request = None,
     db: DatabaseManager = Depends(get_db)
 ):
+    ip = _get_client_ip(request) if request else "unknown"
+
+    # Chequear si esta IP está bloqueada antes de tocar Supabase
+    bloqueada, segundos = _check_rate_limit(ip)
+    if bloqueada:
+        minutos = segundos // 60
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demasiados intentos fallidos. Esperá {minutos} minuto{'s' if minutos != 1 else ''} antes de intentar de nuevo.",
+            headers={"Retry-After": str(segundos)}
+        )
+
     success, msg, user_data = db.login_user(email, password)
+
     if not success:
-        raise HTTPException(status_code=401, detail=msg)
+        # Registrar el intento fallido para esta IP
+        _login_attempts[ip].append(time.time())
+        fallidos_ahora = len(_login_attempts[ip])
+        restantes = _LOGIN_MAX_INTENTOS - fallidos_ahora
+        if restantes > 0:
+            raise HTTPException(
+                status_code=401,
+                detail=f"{msg} Te quedan {restantes} intento{'s' if restantes != 1 else ''} antes de un bloqueo temporal."
+            )
+        else:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intentá de nuevo en {_LOGIN_VENTANA_SEG // 60} minutos.",
+                headers={"Retry-After": str(_LOGIN_VENTANA_SEG)}
+            )
+
+    # Login exitoso: limpiar intentos fallidos de esta IP
+    _login_attempts.pop(ip, None)
     return {"message": msg, "user": user_data}
 
 @app.post("/api/v1/logout", tags=["Auth"])
