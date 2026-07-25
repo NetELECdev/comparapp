@@ -618,6 +618,19 @@
                 <input v-model="formComercio.direccion_comer" placeholder="Rio Negro 528..." />
               </div>
               <div class="form-group full">
+                <label>Ubicación (pegar de Google Maps)</label>
+                <input v-model="coordsPegar" placeholder="-34.6177, -68.3360" @input="parsearCoordenadas" />
+                <span class="form-hint">Clic derecho en el local en Google Maps → tocá las coordenadas para copiarlas → pegalas acá. Se completan lat/lng solos.</span>
+              </div>
+              <div class="form-group">
+                <label>Latitud</label>
+                <input v-model.number="formComercio.lat" type="number" step="any" placeholder="-34.6177" />
+              </div>
+              <div class="form-group">
+                <label>Longitud</label>
+                <input v-model.number="formComercio.lng" type="number" step="any" placeholder="-68.3360" />
+              </div>
+              <div class="form-group full">
                 <label>Representante</label>
                 <input v-model="formComercio.representa_comer" placeholder="Nombre contacto" />
               </div>
@@ -751,6 +764,8 @@ interface Comercio {
   logo_comer: string | null
   plan_comer?: string | null
   plan_vencimiento_comer?: string | null
+  lat?: number | null
+  lng?: number | null
 }
 
 interface Oferta {
@@ -1253,15 +1268,37 @@ const editingComercioId = ref<string | null>(null)
 const formComercio = ref<Partial<Comercio>>({
   nombre_comer: '', direccion_comer: '', te_comer: '',
   email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true,
-  plan_comer: 'free', plan_vencimiento_comer: ''
+  plan_comer: 'free', plan_vencimiento_comer: '',
+  lat: null, lng: null
 })
+
+// Campo auxiliar: pegar "lat, lng" o un link de Google Maps y auto-completar
+const coordsPegar = ref('')
+
+function parsearCoordenadas() {
+  const texto = coordsPegar.value.trim()
+  if (!texto) return
+  const atMatch   = texto.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)          // .../@lat,lng
+  const bangMatch = texto.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)      // .../!3dlat!4dlng
+  const pairMatch = texto.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/) // "lat, lng"
+  let lat: number | null = null, lng: number | null = null
+  if (atMatch)        { lat = parseFloat(atMatch[1]);   lng = parseFloat(atMatch[2]) }
+  else if (bangMatch) { lat = parseFloat(bangMatch[1]); lng = parseFloat(bangMatch[2]) }
+  else if (pairMatch) { lat = parseFloat(pairMatch[1]); lng = parseFloat(pairMatch[2]) }
+  if (lat !== null && lng !== null) {
+    formComercio.value.lat = lat
+    formComercio.value.lng = lng
+  }
+}
 
 function openModalComercio() {
   editingComercioId.value = null
+  coordsPegar.value = ''
   formComercio.value = {
     nombre_comer: '', direccion_comer: '', te_comer: '',
     email_comer: '', representa_comer: '', cate_comer: '', logo_comer: '', activo_comer: true,
-    plan_comer: 'free', plan_vencimiento_comer: ''
+    plan_comer: 'free', plan_vencimiento_comer: '',
+    lat: null, lng: null
   }
   modalComercioOpen.value = true
 }
@@ -1270,6 +1307,7 @@ function closeModalComercio() { modalComercioOpen.value = false; editingComercio
 
 function editComercio(p: Comercio) {
   editingComercioId.value = p.id_comer
+  coordsPegar.value = ''
   formComercio.value = { ...p }
   modalComercioOpen.value = true
 }
@@ -1288,7 +1326,9 @@ async function saveComercio() {
       activo_comer: !!formComercio.value.activo_comer,
       plan_comer: formComercio.value.plan_comer || 'free',
       plan_vencimiento_comer: formComercio.value.plan_vencimiento_comer || null,
-      fechaIngreso_comer: new Date().toISOString().split('T')[0]
+      fechaIngreso_comer: new Date().toISOString().split('T')[0],
+      lat: (formComercio.value.lat !== null && formComercio.value.lat !== undefined && String(formComercio.value.lat) !== '') ? Number(formComercio.value.lat) : null,
+      lng: (formComercio.value.lng !== null && formComercio.value.lng !== undefined && String(formComercio.value.lng) !== '') ? Number(formComercio.value.lng) : null
     }
     if (!payload.nombre_comer) { showToast('El nombre es requerido', 'error'); saving.value = false; return }
     if (editingComercioId.value) {

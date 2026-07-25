@@ -1141,12 +1141,40 @@ class DatabaseManager:
 
 
     # ===== MÉTODOS PARA PROVEEDORES =====
+    def _build_point_ewkt(self, lat, lng) -> Optional[str]:
+        """
+        Convierte lat/lng a EWKT PostGIS (SRID 4326).
+        PostGIS usa POINT(lng lat) -> la longitud va PRIMERO.
+        Devuelve None si faltan o son invalidos (asi no se pisa la ubicacion existente).
+        """
+        if lat is None or lng is None or lat == '' or lng == '':
+            return None
+        try:
+            lat_f = float(lat)
+            lng_f = float(lng)
+        except (TypeError, ValueError):
+            return None
+        if not (-90 <= lat_f <= 90) or not (-180 <= lng_f <= 180):
+            return None
+        return f"SRID=4326;POINT({lng_f} {lat_f})"
+
+    def _apply_ubicacion(self, data: Dict) -> Dict:
+        """Extrae lat/lng del payload y los transforma en ubicacion_comer (POINT)."""
+        data = dict(data)
+        lat = data.pop('lat', None)
+        lng = data.pop('lng', None)
+        point = self._build_point_ewkt(lat, lng)
+        if point is not None:
+            data['ubicacion_comer'] = point
+        return data
+
     def insert_comercio(self, comercio_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
         """Inserta un nuevo comercio en Supabase"""
         try:
-            response = self.supabase.table('comercio').insert(comercio_data).execute()
+            payload = self._apply_ubicacion(comercio_data)
+            response = self.supabase.table('comercio').insert(payload).execute()
             if response.data:
-                return response.data[0], None
+                return self._enrich_comercios(response.data)[0], None
             return None, "No se recibieron datos del servidor"
         except Exception as e:
             return None, str(e)
@@ -1154,9 +1182,10 @@ class DatabaseManager:
     def update_comerdor(self, comercio_id: str, update_data: Dict) -> Tuple[Optional[Dict], Optional[str]]:
         """Actualiza un comercio existente"""
         try:
-            response = self.supabase.table('comercio').update(update_data).eq('id_comer', comercio_id).execute()
+            payload = self._apply_ubicacion(update_data)
+            response = self.supabase.table('comercio').update(payload).eq('id_comer', comercio_id).execute()
             if response.data:
-                return response.data[0], None
+                return self._enrich_comercios(response.data)[0], None
             return None, "Comercio no encontrado"
         except Exception as e:
             return None, str(e)
@@ -1204,7 +1233,7 @@ class DatabaseManager:
         try:
             response = self.supabase.table('comercio').select('*').eq('id_comer', comercio_id).execute()
             if response.data:
-                return response.data[0], None
+                return self._enrich_comercios(response.data)[0], None
             return None, "Comercio no encontrado"
         except Exception as e:
             return None, str(e)
