@@ -1411,7 +1411,7 @@ class DatabaseManager:
             lista = lista_resp.data[0]
 
             items_resp = self.supabase.table('lista_item')\
-                .select('*, producto(id_prod, nombre_prod, imagen_prod, precio_prod, marca_prod, comercio_prod, unidad_prod, cantidad_prod)')\
+                .select('*, producto(id_prod, nombre_prod, imagen_prod, precio_prod, marca_prod, comercio_prod, unidad_prod, cantidad_prod, fecha_prod)')\
                 .eq('id_lista', lista_id)\
                 .execute()
             lista['items'] = items_resp.data or []

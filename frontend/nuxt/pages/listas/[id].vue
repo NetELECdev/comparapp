@@ -97,12 +97,17 @@
                 <span v-if="item.marca" class="item-marca">· {{ item.marca }}</span>
                 <span class="item-prioridad" :class="item.prioridad">{{ item.prioridad }}</span>
               </div>
-              <!-- Proveedor + distancia del producto vinculado -->
-              <div v-if="item.producto?.provee_prod" class="item-proveedor-row">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>
-                <span class="item-proveedor-nombre">{{ item.producto.provee_prod }}</span>
-                <span v-if="distanciaProveedor(item.producto.provee_prod)" class="item-distancia">
-                  · {{ distanciaProveedor(item.producto.provee_prod) }}
+              <!-- Comercio + distancia + fecha del producto vinculado -->
+              <div v-if="item.producto?.comercio_prod || fechaCarga(item.producto?.fecha_prod)" class="item-proveedor-row">
+                <template v-if="item.producto?.comercio_prod">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/></svg>
+                  <span class="item-proveedor-nombre">{{ item.producto.comercio_prod }}</span>
+                  <span v-if="distanciaComercio(item.producto.comercio_prod)" class="item-distancia">
+                    · {{ distanciaComercio(item.producto.comercio_prod) }}
+                  </span>
+                </template>
+                <span v-if="fechaCarga(item.producto?.fecha_prod)" class="item-fecha">
+                  · 📅 {{ fechaCarga(item.producto?.fecha_prod) }}
                 </span>
               </div>
               <p v-if="item.notas" class="item-notas">💬 {{ item.notas }}</p>
@@ -200,7 +205,10 @@
               />
               <div class="prod-info">
                 <p class="prod-nombre">{{ prod.nombre_prod }}</p>
-                <p class="prod-meta">{{ prod.marca_prod }} · {{ prod.provee_prod }}</p>
+                <p class="prod-meta">
+                  {{ prod.marca_prod }}<template v-if="prod.comercio_prod"> · {{ prod.comercio_prod }}</template><template v-if="distanciaComercio(prod.comercio_prod)"> · {{ distanciaComercio(prod.comercio_prod) }}</template>
+                </p>
+                <p v-if="fechaCarga(prod.fecha_prod)" class="prod-fecha">📅 Cargado {{ fechaCarga(prod.fecha_prod) }}</p>
                 <p v-if="esProductoViejo(prod)" class="prod-aviso">⚠️ Precio con más de 7 días — puede no estar actualizado</p>
               </div>
               <span class="prod-precio">${{ Number(prod.precio_prod).toLocaleString('es-AR') }}</span>
@@ -403,7 +411,7 @@ interface Producto {
   nombre_prod: string
   marca_prod: string
   precio_prod: string
-  provee_prod: string
+  comercio_prod: string
   imagen_prod: string | null
   unidad_prod: string
   cantidad_prod: number
@@ -597,6 +605,50 @@ function labelDistancia(km: number | null | undefined): string {
   return km < 1 ? `${(km * 1000).toFixed(0)} m` : `${km.toFixed(1)} km`
 }
 
+// ── Comercios: mapa nombre→coordenadas para distancia por producto ──
+// El producto solo trae comercio_prod (texto). Resolvemos sus coordenadas
+// contra la lista de comercios (que vienen con lat/lng enriquecidos).
+const comerciosMap = ref<Record<string, { lat: number; lng: number }>>({})
+
+async function cargarComercios() {
+  try {
+    const res = await api<{ results: any[] }>(`/comercios`)
+    const map: Record<string, { lat: number; lng: number }> = {}
+    for (const c of (res.results || [])) {
+      if (c && c.nombre_comer && c.lat != null && c.lng != null) {
+        map[String(c.nombre_comer).trim().toLowerCase()] = { lat: Number(c.lat), lng: Number(c.lng) }
+      }
+    }
+    comerciosMap.value = map
+  } catch {}
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.asin(Math.sqrt(a))
+}
+
+// Distancia (texto) desde el usuario al comercio de un producto, por nombre de comercio
+function distanciaComercio(nombreComercio?: string | null): string | null {
+  if (!nombreComercio || userLat.value == null || userLng.value == null) return null
+  const c = comerciosMap.value[nombreComercio.trim().toLowerCase()]
+  if (!c) return null
+  const d = haversineKm(userLat.value, userLng.value, c.lat, c.lng)
+  return d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`
+}
+
+// Fecha de carga del precio, formateada
+function fechaCarga(fecha?: string | null): string | null {
+  if (!fecha) return null
+  const d = new Date(fecha)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 // Cargar lista
 async function cargar() {
   loading.value = true
@@ -741,7 +793,11 @@ watch(mostrarOptimizador, (val) => {
   }
 })
 
-onMounted(cargar)
+onMounted(async () => {
+  await cargar()
+  cargarComercios()
+  obtenerUbicacion()
+})
 </script>
 
 <style scoped>
@@ -1216,5 +1272,7 @@ onMounted(cargar)
 }
 .item-proveedor-nombre { color:var(--text-secondary); font-weight:500; }
 .item-distancia { color:var(--text-muted); }
+.item-fecha { color:var(--text-muted); font-size:0.72rem; }
+.prod-fecha { color:var(--text-muted); font-size:0.7rem; margin:0.15rem 0 0; }
 
 </style>

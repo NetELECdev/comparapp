@@ -242,6 +242,19 @@
             Nuevo
           </button>
         </div>
+        <div v-if="geoEstado !== 'ok'" class="geo-bar">
+          <span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+            </svg>
+            <template v-if="geoEstado === 'error'">No se pudo obtener tu ubicación — las distancias no se muestran.</template>
+            <template v-else-if="geoEstado === 'pidiendo'">Obteniendo tu ubicación...</template>
+            <template v-else>Activá tu ubicación para ver la distancia a cada comercio.</template>
+          </span>
+          <button class="btn-sm" @click="pedirUbicacionAdmin" :disabled="geoEstado === 'pidiendo'">
+            {{ geoEstado === 'pidiendo' ? '...' : 'Activar ubicación' }}
+          </button>
+        </div>
         <div v-if="comerciosFiltrados.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -274,6 +287,32 @@
                   <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                 </svg>
                 {{ prov.email_comer }}
+              </span>
+            </div>
+            <div class="provider-stats">
+              <span class="provider-stat">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+                </svg>
+                {{ contarProductos(prov) }} {{ contarProductos(prov) === 1 ? 'producto' : 'productos' }}
+              </span>
+              <span class="provider-stat" v-if="distanciaComercio(prov) !== null">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                {{ distanciaComercio(prov) }} km
+              </span>
+              <span class="provider-stat provider-stat--muted" v-else-if="prov.lat == null || prov.lng == null" title="Este comercio no tiene ubicación cargada">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                sin ubicación
+              </span>
+              <span class="provider-stat provider-stat--muted" v-else title="Activá tu ubicación para ver la distancia">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                — km
               </span>
             </div>
             <div class="provider-actions">
@@ -1005,6 +1044,56 @@ const comerciosFiltrados = computed(() => {
   )
 })
 
+// ─── Ubicación del admin + distancia a cada comercio ──────────
+const adminPos = ref<{ lat: number; lng: number } | null>(null)
+const geoEstado = ref<'idle' | 'pidiendo' | 'ok' | 'error'>('idle')
+
+function pedirUbicacionAdmin() {
+  if (!('geolocation' in navigator)) { geoEstado.value = 'error'; return }
+  geoEstado.value = 'pidiendo'
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      adminPos.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      geoEstado.value = 'ok'
+    },
+    () => { geoEstado.value = 'error' },
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+  )
+}
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return Math.round(R * 2 * Math.asin(Math.sqrt(a)) * 10) / 10
+}
+
+function distanciaComercio(prov: Comercio): number | null {
+  if (!adminPos.value) return null
+  if (prov.lat == null || prov.lng == null) return null
+  return haversine(adminPos.value.lat, adminPos.value.lng, Number(prov.lat), Number(prov.lng))
+}
+
+// ─── Cantidad de productos por comercio ───────────────────────
+// Se cuenta desde los productos ya cargados. comercio_prod es texto libre que
+// espeja nombre_comer, así que se compara en minúsculas y sin espacios (mismo
+// criterio case-insensitive que usa el resto del sistema).
+const productosPorComercio = computed(() => {
+  const map = new Map<string, number>()
+  for (const p of productos.value) {
+    const key = (p.comercio_prod || '').trim().toLowerCase()
+    if (!key) continue
+    map.set(key, (map.get(key) || 0) + 1)
+  }
+  return map
+})
+
+function contarProductos(prov: Comercio): number {
+  return productosPorComercio.value.get((prov.nombre_comer || '').trim().toLowerCase()) || 0
+}
+
 const categoriasUnicas = computed(() => {
   const set = new Set(productos.value.map(p => p.cate_prod).filter(Boolean))
   return Array.from(set).sort()
@@ -1434,7 +1523,7 @@ async function loadData() {
   loading.value = true
   try {
     const [prodRes, provRes, medidasRes, catsRes] = await Promise.all([
-      $fetch<{ count: number; results: Producto[] }>(`${config.public.apiBase}/products`).catch(() => ({ results: [] })),
+      $fetch<{ count: number; results: Producto[] }>(`${config.public.apiBase}/products?limit=1000`).catch(() => ({ results: [] })),
       $fetch<{ count: number; results: Comercio[] }>(`${config.public.apiBase}/comercios`).catch(() => ({ results: [] })),
       $fetch<{id: number, nombre: string}[]>(`${config.public.apiBase}/medidas`).catch(() => []),
       $fetch<{id_cate: string, nombre_cate: string}[]>(`${config.public.apiBase}/categorias`).catch(() => [])
@@ -1455,6 +1544,7 @@ async function loadData() {
 onMounted(() => {
   loadData()
   cargarComerciosPendientes()
+  pedirUbicacionAdmin()
   try {
     const stored = localStorage.getItem('comparapp_user')
     if (stored) miPropioId.value = JSON.parse(stored).id || ''
@@ -1807,8 +1897,15 @@ onMounted(() => {
 .provider-status.inactive { background: var(--accent-rose); }
 .provider-name { font-size: 1rem; font-weight: 600; margin: 0 0 0.25rem; }
 .provider-cat { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 0.75rem; }
-.provider-meta { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
+.provider-meta { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 0.75rem; }
 .provider-meta span { display: flex; align-items: center; gap: 0.375rem; font-size: 0.78rem; color: var(--text-muted); }
+.provider-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.provider-stat { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); color: var(--accent-blue); }
+.provider-stat svg { opacity: 0.85; }
+.provider-stat--muted { background: rgba(255,255,255,0.04); border-color: var(--border-subtle); color: var(--text-muted); font-weight: 500; }
+.geo-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.6rem 0.85rem; margin-bottom: 0.25rem; background: rgba(232,196,160,0.06); border: 1px solid rgba(232,196,160,0.18); border-radius: var(--radius-md); }
+.geo-bar span { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); }
+.geo-bar svg { color: var(--accent-gold); flex-shrink: 0; }
 .provider-actions { display: flex; gap: 0.5rem; }
 
 /* ─── CATEGORIES ─── */
