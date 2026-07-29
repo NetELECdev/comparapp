@@ -713,7 +713,7 @@ def get_all_products(
             params["nombre_prod"] = f"ilike.%{q}%"
 
         if comercio and comercio.strip():
-            params["comercio_prod"] = f"eq.{comercio.strip()}"
+            params["comercio_prod"] = f"ilike.{comercio.strip()}"
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
 
