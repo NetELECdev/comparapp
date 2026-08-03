@@ -8,7 +8,13 @@ export default defineNuxtConfig({
       title: 'ComparApp - Compara y Ahorra',
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        // OG por defecto (las páginas de comercio lo pisan con su propio contenido)
+        { property: 'og:site_name', content: 'ComparApp' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:title', content: 'ComparApp - Compara y Ahorra' },
+        { property: 'og:description', content: 'Compará precios de tus comercios y ahorrá en cada compra.' },
+        { name: 'twitter:card', content: 'summary' }
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -39,6 +45,28 @@ export default defineNuxtConfig({
         target: 'http://localhost:8000/api/v1',
         changeOrigin: true,
         prependPath: true
+      }
+    }
+  },
+  // En el build de producción, trae la lista de comercios y agrega una ruta
+  // /c/{id_comer} por cada uno, para que cada página de comercio se prerenderice
+  // con su propio OG (tarjeta linda al compartir en WhatsApp/Facebook).
+  // Requiere que NUXT_PUBLIC_API_BASE apunte al backend de Render en Netlify.
+  hooks: {
+    async 'nitro:config'(nitroConfig) {
+      if (nitroConfig.dev) return
+      try {
+        const apiBase = process.env.NUXT_PUBLIC_API_BASE ?? 'http://localhost:8000/api/v1'
+        const res = await fetch(`${apiBase}/comercios`)
+        const data = await res.json()
+        const rutas = (data.results || [])
+          .filter((c) => c && c.id_comer)
+          .map((c) => `/c/${c.id_comer}`)
+        nitroConfig.prerender = nitroConfig.prerender || {}
+        nitroConfig.prerender.routes = [...(nitroConfig.prerender.routes || []), ...rutas]
+        console.log(`[prerender] ${rutas.length} páginas de comercio agregadas`)
+      } catch (e) {
+        console.warn('[prerender] no se pudieron traer los comercios:', e?.message || e)
       }
     }
   },

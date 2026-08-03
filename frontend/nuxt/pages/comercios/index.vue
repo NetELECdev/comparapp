@@ -103,6 +103,9 @@
               </span>
               <span v-else-if="sortMode === 'distancia'" class="comercio-dist muted">Sin ubicación</span>
             </div>
+            <button class="ver-prod-btn" @click.stop="navigateTo(`/c/${p.id_comer}`)">
+              Ver productos
+            </button>
           </div>
           <svg class="comercio-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m9 18 6-6-6-6"/>
@@ -489,4 +492,23 @@ onMounted(async () => {
   .page-title { font-size:1.25rem; }
   .sort-btns { display:none; } /* en mobile los sort quedan solo en el header-right si hay espacio */
 }
+
+/* Botón ver productos (vitrina pública) en la tarjeta */
+.ver-prod-btn {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(232,196,160,0.12);
+  border: 1px solid rgba(232,196,160,0.3);
+  color: var(--accent-gold);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ver-prod-btn:hover {
+  background: rgba(232,196,160,0.2);
+  border-color: rgba(232,196,160,0.5);
+}
+
 </style>

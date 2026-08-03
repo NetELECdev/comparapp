@@ -60,6 +60,20 @@
           </div>
         </div>
 
+        <!-- Ver vitrina pública -->
+        <a
+          v-if="!editando"
+          :href="`/c/${id}`"
+          target="_blank"
+          rel="noopener"
+          class="vitrina-btn animate-fade-in-up stagger-1"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          Ver vitrina pública
+        </a>
+
         <!-- FORMULARIO / VISTA -->
         <div class="form-card animate-fade-in-up stagger-2">
 
@@ -494,4 +508,18 @@ onMounted(async () => {
   .page-title { font-size:1.2rem; }
   .field-row { grid-template-columns: 1fr; }
 }
+
+/* Botón ver vitrina pública */
+.vitrina-btn {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.875rem; border-radius: var(--radius-md);
+  background: rgba(232,196,160,0.1); border: 1px solid rgba(232,196,160,0.3);
+  color: var(--accent-gold); font-size: 0.9rem; font-weight: 600;
+  text-decoration: none; transition: all 0.25s;
+}
+.vitrina-btn:hover {
+  background: rgba(232,196,160,0.18); border-color: rgba(232,196,160,0.5);
+  transform: translateY(-1px);
+}
+
 </style>
