@@ -2870,6 +2870,311 @@ def register_comercio_google(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+#  IMPORTADOR DE PRODUCTOS POR ARCHIVO  —  endpoint de IMPORTAR
+#  Pegar en main.py junto al endpoint de preview, ANTES de
+#  `if __name__ == "__main__":`.
+#
+#  - Solo admin (mismo guard que el preview).
+#  - Reusa db.create_product / db.update_product  →  historial de
+#    precios y alertas se manejan solos, no se duplica lógica.
+#  - El admin NO tiene tope de plan (el límite es solo para
+#    cuentas 'comercio'), así que carga sin restricción.
+#  - Guarda ean_prod, cate_prod y cate_id (categoría automática
+#    por palabra clave sobre el nombre).
+#  - Mismo mapeo/parseo que el preview (para que los números
+#    coincidan con lo previsualizado).
+# ============================================================
+
+# ------------------------------------------------------------
+#  Reglas de categoría (id de la tabla cate_producto).
+#  El ORDEN es la prioridad: frases específicas primero,
+#  palabras genéricas al final. Gana el primer match.
+#  Rubros: 1 Almacen · 2 Bebidas · 3 Carniceria · 4 Limpieza
+#          5 Verduleria · 6 Otros · 7 Ferreteria · 8 Lacteos
+#          10 Servicios · 11 Higiene Personal
+# ------------------------------------------------------------
+REGLAS_CATEGORIA = [
+    # --- frases ambiguas primero ---
+    ("JABON EN POLVO", 4, "Limpieza"), ("JABON LIQUIDO", 4, "Limpieza"),
+    ("JABON BLANCO", 4, "Limpieza"), ("JABON EN PAN", 4, "Limpieza"),
+    ("JABON DE TOCADOR", 11, "Higiene Personal"),
+    ("PURE DE TOMATE", 1, "Almacen"), ("SALSA DE TOMATE", 1, "Almacen"),
+    ("EXTRACTO DE TOMATE", 1, "Almacen"), ("DULCE DE LECHE", 8, "Lacteos"),
+    ("PAPAS FRITAS", 1, "Almacen"), ("QUESO CREMA", 8, "Lacteos"),
+    ("ALCOHOL EN GEL", 11, "Higiene Personal"),
+    ("BOLSA PARA HORNO", 1, "Almacen"), ("BOLSAS PARA HORNO", 1, "Almacen"),
+    ("CREMA DE LECHE", 8, "Lacteos"), ("CREMA PARA BATIR", 8, "Lacteos"),
+    ("CREMA CORPORAL", 11, "Higiene Personal"), ("CREMA DE MANOS", 11, "Higiene Personal"),
+    ("CREMA PARA COCINAR", 1, "Almacen"), ("CREMA CHANTILLY", 1, "Almacen"),
+    # --- Bebidas ---
+    ("CERVEZA", 2, "Bebidas"), ("GASEOSA", 2, "Bebidas"), ("COCA COLA", 2, "Bebidas"),
+    ("SPRITE", 2, "Bebidas"), ("FANTA", 2, "Bebidas"), ("PASO DE LOS TOROS", 2, "Bebidas"),
+    ("AGUA", 2, "Bebidas"), ("SODA", 2, "Bebidas"), ("VINO", 2, "Bebidas"),
+    ("FERNET", 2, "Bebidas"), ("JUGO", 2, "Bebidas"), ("VODKA", 2, "Bebidas"),
+    ("WHISKY", 2, "Bebidas"), ("APERITIVO", 2, "Bebidas"), ("ENERGIZANTE", 2, "Bebidas"),
+    ("SPEED", 2, "Bebidas"), ("AMARGO", 2, "Bebidas"), ("GANCIA", 2, "Bebidas"),
+    ("SIDRA", 2, "Bebidas"), ("CHAMPAGNE", 2, "Bebidas"), ("TERMA", 2, "Bebidas"),
+    ("LICOR", 2, "Bebidas"), (" GIN ", 2, "Bebidas"), ("ANIS", 2, "Bebidas"),
+    ("FRIZZE", 2, "Bebidas"), ("APEROL", 2, "Bebidas"), ("CAMPARI", 2, "Bebidas"),
+    ("CHOCOLATADA", 2, "Bebidas"),
+    # --- Lacteos ---
+    ("LECHE", 8, "Lacteos"), ("YOGUR", 8, "Lacteos"), ("YOGHUR", 8, "Lacteos"),
+    ("QUESO", 8, "Lacteos"), ("MANTECA", 8, "Lacteos"), ("RICOTA", 8, "Lacteos"),
+    ("MARGARINA", 8, "Lacteos"), ("DANONINO", 8, "Lacteos"), ("POSTRE", 8, "Lacteos"),
+    # --- Carniceria ---
+    ("CARNE", 3, "Carniceria"), ("POLLO", 3, "Carniceria"), ("MILANESA", 3, "Carniceria"),
+    ("CHORIZO", 3, "Carniceria"), ("MORCILLA", 3, "Carniceria"), ("BONDIOLA", 3, "Carniceria"),
+    ("MATAMBRE", 3, "Carniceria"), ("ASADO", 3, "Carniceria"), ("HAMBURGUESA", 3, "Carniceria"),
+    ("SALCHICHA", 3, "Carniceria"), ("COSTILLA", 3, "Carniceria"), ("PECHUGA", 3, "Carniceria"),
+    ("CERDO", 3, "Carniceria"), ("PESCADO", 3, "Carniceria"), ("MERLUZA", 3, "Carniceria"),
+    ("VACIO", 3, "Carniceria"), ("NALGA", 3, "Carniceria"), ("PECETO", 3, "Carniceria"),
+    ("CUADRIL", 3, "Carniceria"), ("JAMON", 3, "Carniceria"), ("SALAME", 3, "Carniceria"),
+    ("MORTADELA", 3, "Carniceria"), ("PANCETA", 3, "Carniceria"), ("FIAMBRE", 3, "Carniceria"),
+    ("SALCHICHON", 3, "Carniceria"),
+    # --- Limpieza ---
+    ("DETERGENTE", 4, "Limpieza"), ("LAVANDINA", 4, "Limpieza"), ("SUAVIZANTE", 4, "Limpieza"),
+    ("LIMPIADOR", 4, "Limpieza"), ("LUSTRAMUEBLE", 4, "Limpieza"), ("INSECTICIDA", 4, "Limpieza"),
+    ("DESINFECTANTE", 4, "Limpieza"), ("CLORO", 4, "Limpieza"), ("LAVAVAJILLA", 4, "Limpieza"),
+    (" CIF ", 4, "Limpieza"), ("AYUDIN", 4, "Limpieza"), ("ESPONJA", 4, "Limpieza"),
+    ("VIRULANA", 4, "Limpieza"), ("TRAPO", 4, "Limpieza"), ("RESIDUO", 4, "Limpieza"),
+    ("AROMATIZANTE", 4, "Limpieza"), (" AER ", 4, "Limpieza"), ("POWER POCKET", 4, "Limpieza"),
+    ("ANTIGRASA", 4, "Limpieza"), ("CERA ", 4, "Limpieza"), ("ALCOHOL", 4, "Limpieza"),
+    ("ZIPLOC", 4, "Limpieza"), ("DESODORANTE DE AMBIENTE", 4, "Limpieza"), ("PLUMERO", 4, "Limpieza"),
+    ("BLEM", 4, "Limpieza"),
+    # --- Higiene Personal ---
+    ("SHAMPOO", 11, "Higiene Personal"), ("SHAMPU", 11, "Higiene Personal"),
+    ("ACONDICIONADOR", 11, "Higiene Personal"), ("DESODORANTE", 11, "Higiene Personal"),
+    ("PASTA DENTAL", 11, "Higiene Personal"), ("CREMA DENTAL", 11, "Higiene Personal"),
+    ("CEPILLO DENTAL", 11, "Higiene Personal"), ("ENJUAGUE BUCAL", 11, "Higiene Personal"),
+    ("PAÑAL", 11, "Higiene Personal"), ("PANAL", 11, "Higiene Personal"),
+    ("TOALLITA", 11, "Higiene Personal"), ("TOALLA FEMENINA", 11, "Higiene Personal"),
+    ("PROTECTOR", 11, "Higiene Personal"), ("ALGODON", 11, "Higiene Personal"),
+    ("HISOPO", 11, "Higiene Personal"), ("AFEITAR", 11, "Higiene Personal"),
+    ("GILLETTE", 11, "Higiene Personal"), ("PAPEL HIGIENICO", 11, "Higiene Personal"),
+    ("COLONIA", 11, "Higiene Personal"), ("TALCO", 11, "Higiene Personal"),
+    ("JABON", 11, "Higiene Personal"),  # jabon suelto -> tocador (despues de los de limpieza)
+    # --- Ferreteria ---
+    ("FOCO", 7, "Ferreteria"), ("LAMPARA", 7, "Ferreteria"), (" PILA", 7, "Ferreteria"),
+    ("CINTA", 7, "Ferreteria"), ("PEGAMENTO", 7, "Ferreteria"), ("VELA", 7, "Ferreteria"),
+    ("FOSFORO", 7, "Ferreteria"), ("ENCENDEDOR", 7, "Ferreteria"), ("MATAFUEGO", 7, "Ferreteria"),
+    ("MECHERO", 7, "Ferreteria"), ("CANDADO", 7, "Ferreteria"),
+    # --- Verduleria ---
+    ("PAPA", 5, "Verduleria"), ("CEBOLLA", 5, "Verduleria"), ("LECHUGA", 5, "Verduleria"),
+    ("ZANAHORIA", 5, "Verduleria"), ("MANZANA", 5, "Verduleria"), ("BANANA", 5, "Verduleria"),
+    ("NARANJA", 5, "Verduleria"), ("LIMON", 5, "Verduleria"), ("TOMATE", 5, "Verduleria"),
+    ("ZAPALLO", 5, "Verduleria"), ("MORRON", 5, "Verduleria"),
+    # --- Servicios ---
+    ("RECARGA", 10, "Servicios"), ("SALDO", 10, "Servicios"), ("CARGA VIRTUAL", 10, "Servicios"),
+    # --- Almacen (lo mas generico al final) ---
+    ("ACEITE", 1, "Almacen"), ("ARROZ", 1, "Almacen"), ("FIDEO", 1, "Almacen"),
+    ("HARINA", 1, "Almacen"), ("YERBA", 1, "Almacen"), ("AZUCAR", 1, "Almacen"),
+    ("POLENTA", 1, "Almacen"), ("LENTEJA", 1, "Almacen"), ("POROTO", 1, "Almacen"),
+    ("GARBANZO", 1, "Almacen"), ("GALLETITA", 1, "Almacen"), ("GALLETA", 1, "Almacen"),
+    ("BIZCOCHO", 1, "Almacen"), ("MERMELADA", 1, "Almacen"), ("CAFE", 1, "Almacen"),
+    ("MATE COCIDO", 1, "Almacen"), ("CACAO", 1, "Almacen"), ("MAYONESA", 1, "Almacen"),
+    ("KETCHUP", 1, "Almacen"), ("MOSTAZA", 1, "Almacen"), ("VINAGRE", 1, "Almacen"),
+    ("CALDO", 1, "Almacen"), ("SOPA", 1, "Almacen"), ("PAN RALLADO", 1, "Almacen"),
+    ("REBOZADOR", 1, "Almacen"), ("ATUN", 1, "Almacen"), ("ARVEJA", 1, "Almacen"),
+    ("CHOCLO", 1, "Almacen"), ("PURE", 1, "Almacen"), ("FLAN", 1, "Almacen"),
+    ("GELATINA", 1, "Almacen"), ("SNACK", 1, "Almacen"), ("TURRON", 1, "Almacen"),
+    ("ALFAJOR", 1, "Almacen"), ("CARAMELO", 1, "Almacen"), ("CHUPETIN", 1, "Almacen"),
+    ("MANI ", 1, "Almacen"), ("ACEITUNA", 1, "Almacen"), ("CONSERVA", 1, "Almacen"),
+    ("DULCE", 1, "Almacen"), ("CHOCOLATE", 1, "Almacen"), ("GOLOSINA", 1, "Almacen"),
+    ("CHICLE", 1, "Almacen"), ("PAN LACTAL", 1, "Almacen"), ("TAPA", 1, "Almacen"),
+    ("PREPIZZA", 1, "Almacen"), ("CONDIMENTO", 1, "Almacen"), ("ESPECIA", 1, "Almacen"),
+    ("ADEREZO", 1, "Almacen"), ("AJI", 1, "Almacen"), ("ALMIDON", 1, "Almacen"),
+    ("MAIZENA", 1, "Almacen"), ("AVENA", 1, "Almacen"), ("BOMBON", 1, "Almacen"),
+    ("BOCADITO", 1, "Almacen"), ("SEMOLA", 1, "Almacen"), ("PANIFICAD", 1, "Almacen"),
+    ("BUDIN", 1, "Almacen"), ("MAGDALENA", 1, "Almacen"), ("OBLEA", 1, "Almacen"),
+    ("CEREAL", 1, "Almacen"), ("PANQUEQUE", 1, "Almacen"), ("REINA MORA", 1, "Almacen"),
+    ("CAPELETI", 1, "Almacen"), ("RAVIOL", 1, "Almacen"), ("SORRENTINO", 1, "Almacen"),
+    ("COMINO", 1, "Almacen"), ("OREGANO", 1, "Almacen"), ("PIMENTON", 1, "Almacen"),
+    ("COCO RALLADO", 1, "Almacen"),
+]
+RUBRO_DEFAULT = (6, "Otros")
+
+
+def clasificar_rubro(nombre: str):
+    """Devuelve (cate_id, cate_prod) segun palabra clave. Default: Otros."""
+    n = " " + (nombre or "").upper() + " "
+    for frase, cid, cnom in REGLAS_CATEGORIA:
+        if frase in n:
+            return cid, cnom
+    return RUBRO_DEFAULT
+
+
+@app.post("/api/v1/comercios/{comercio_id}/productos/importar", tags=["Comercio Import"])
+async def importar_productos(
+    comercio_id: str,
+    file: UploadFile = File(...),
+    # --- Mapeo (mismo preset que el preview; columnas en base 0) ---
+    encoding: str = Form("latin-1"),
+    separador: str = Form(";"),
+    filas_saltar: int = Form(5),
+    col_nombre: int = Form(2),
+    col_precio: int = Form(9),
+    col_ean: int = Form(0),
+    col_marca: int = Form(6),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Importa (upsert) los productos de un archivo al comercio indicado.
+    - Match por EAN (12-13 dig) y, si no, por nombre normalizado.
+    - Existente  -> update de precio (y backfill de EAN si faltaba).
+    - Nuevo      -> create con ean_prod, marca, categoria automatica,
+                    comercio_prod = nombre del comercio.
+    El historial de precios y las alertas los maneja db (create/update_product).
+    Solo admin.
+    """
+    import io, csv, re
+
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores pueden importar productos")
+
+    # 1) Comercio (nombre para comercio_prod y para cruzar sus productos)
+    com = db.supabase.table("comercio")\
+        .select("nombre_comer")\
+        .eq("id_comer", comercio_id).limit(1).execute()
+    if not com.data:
+        raise HTTPException(status_code=404, detail="Comercio no encontrado")
+    nombre_comer = com.data[0]["nombre_comer"]
+
+    # 2) Leer y parsear el archivo
+    try:
+        contenido = await file.read()
+        texto = contenido.decode(encoding, errors="replace")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo ({encoding}): {e}")
+
+    lector = csv.reader(io.StringIO(texto), delimiter=separador)
+    filas = list(lector)
+    filas = filas[filas_saltar:] if filas_saltar > 0 else filas
+
+    # 3) Helpers (mismos que el preview)
+    def celda(fila, idx):
+        return (fila[idx].strip() if 0 <= idx < len(fila) else "")
+
+    def parse_precio(s):
+        s = (s or "").strip()
+        if not s:
+            return None
+        s = s.replace(".", "").replace(",", ".")   # locale AR
+        try:
+            v = float(s)
+            return v if v > 0 else None
+        except ValueError:
+            return None
+
+    def norm_nombre(s):
+        return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    def ean_valido(s):
+        s = (s or "").strip()
+        if not s or "e+" in s.lower():
+            return None
+        return s if re.fullmatch(r"\d{12,13}", s) else None
+
+    # 4) Productos que YA tiene el comercio (para decidir update vs create)
+    existentes = db.supabase.table("producto")\
+        .select("id_prod, nombre_prod, ean_prod")\
+        .ilike("comercio_prod", nombre_comer)\
+        .eq("activo_prod", True).limit(5000).execute()
+    por_ean, por_nombre, tiene_ean = {}, {}, {}
+    for p in (existentes.data or []):
+        e = (p.get("ean_prod") or "").strip()
+        pid = p["id_prod"]
+        if e:
+            por_ean[e] = pid
+        n = norm_nombre(p.get("nombre_prod"))
+        if n:
+            por_nombre.setdefault(n, pid)
+            tiene_ean[pid] = bool(e)
+
+    # 5) Recorrer y ejecutar
+    creados = actualizados = omitidos = duplicados = 0
+    por_rubro = {}
+    errores = []
+    creados_ean = set()      # EANs ya creados en ESTE archivo (evita duplicar)
+    creados_nombre = set()   # nombres ya creados en ESTE archivo
+
+    for fila in filas:
+        nombre = celda(fila, col_nombre)
+        precio = parse_precio(celda(fila, col_precio))
+        ean = ean_valido(celda(fila, col_ean))
+        marca = celda(fila, col_marca) or None
+
+        # mismas omisiones que el preview
+        if not nombre and precio is None:
+            continue
+        if not nombre or precio is None:
+            omitidos += 1
+            continue
+
+        nnorm = norm_nombre(nombre)
+
+        # --- match contra lo que YA existe en la base ---
+        pid = None
+        matched_by = None
+        if ean and ean in por_ean:
+            pid, matched_by = por_ean[ean], "ean"
+        elif nnorm in por_nombre:
+            pid, matched_by = por_nombre[nnorm], "nombre"
+
+        if pid:
+            # --- ACTUALIZAR: precio (+ backfill de EAN si faltaba) ---
+            cambios = {"precio_prod": precio}
+            if ean and matched_by == "nombre" and not tiene_ean.get(pid, False):
+                cambios["ean_prod"] = ean
+            ok, msg = db.update_product(pid, cambios)
+            if ok:
+                actualizados += 1
+            else:
+                errores.append({"nombre": nombre, "error": msg})
+            continue
+
+        # --- ¿ya lo creamos en ESTE archivo? entonces es duplicado interno ---
+        if (ean and ean in creados_ean) or (nnorm in creados_nombre):
+            duplicados += 1
+            continue
+
+        # --- CREAR: nuevo, con categoria automatica ---
+        cate_id, cate_prod = clasificar_rubro(nombre)
+        nuevo = {
+            "nombre_prod": nombre,
+            "precio_prod": precio,
+            "ean_prod": ean,               # puede ser None
+            "marca_prod": marca,
+            "cate_prod": cate_prod,
+            "cate_id": cate_id,            # int (FK a cate_producto.id)
+            "comercio_prod": nombre_comer,
+            "unidad_prod": "Unidad",       # NOT NULL en la tabla; default generico
+            "cantidad_prod": 1,            # NOT NULL en la tabla; default generico
+            "activo_prod": True,
+        }
+        ok, msg = db.create_product(nuevo)
+        if ok:
+            creados += 1
+            por_rubro[cate_prod] = por_rubro.get(cate_prod, 0) + 1
+            if ean:
+                creados_ean.add(ean)
+            creados_nombre.add(nnorm)
+        else:
+            errores.append({"nombre": nombre, "error": msg})
+
+    return {
+        "comercio": nombre_comer,
+        "creados": creados,
+        "actualizados": actualizados,
+        "omitidos": omitidos,
+        "duplicados": duplicados,
+        "errores": len(errores),
+        "por_rubro": dict(sorted(por_rubro.items(), key=lambda kv: -kv[1])),
+        "detalle_errores": errores[:30],
+    }
+
 
 # ============================================================
 # IMPORTACIÓN DE PRODUCTOS POR ARCHIVO — Paso 1: PREVISUALIZACIÓN
