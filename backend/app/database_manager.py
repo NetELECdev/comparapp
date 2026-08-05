@@ -16,7 +16,7 @@ import struct
 import binascii
 
 
-LIMITE_PRODUCTOS_PLAN_FREE = 10
+LIMITE_PRODUCTOS_PLAN_FREE = 100
 
 
 class DatabaseManager:

@@ -10,6 +10,16 @@ venv/
 __pycache__/
 *.py[cod]
 
-# Otros
+# Secretos y scripts de un solo uso — NUNCA versionar
 .env
+set_admin_pass.py
+test_preview.py
+
+# Datos crudos y recortes de productos — no versionar
+listado*.csv
+producto_rows*.csv
+cate_producto*.csv
+*_recortado.csv
+
+# Otros
 .DS_Store

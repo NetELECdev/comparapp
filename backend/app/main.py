@@ -2871,6 +2871,154 @@ def register_comercio_google(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================
+# IMPORTACIÓN DE PRODUCTOS POR ARCHIVO — Paso 1: PREVISUALIZACIÓN
+# Pegar en main.py, ANTES del bloque  if __name__ == "__main__":
+# No escribe nada en la base: solo analiza y clasifica.
+# El mapeo viene con el preset del POS de tus comercios por defecto,
+# pero es parametrizable (si aparece otro formato, se cambian los números).
+# ============================================================
+
+@app.post("/api/v1/comercios/{comercio_id}/productos/preview", tags=["Comercio Import"])
+async def preview_import_productos(
+    comercio_id: str,
+    file: UploadFile = File(...),
+    # --- Mapeo (preset del POS actual; columnas en base 0) ---
+    encoding: str = Form("latin-1"),
+    separador: str = Form(";"),
+    filas_saltar: int = Form(5),
+    col_nombre: int = Form(2),
+    col_precio: int = Form(9),
+    col_ean: int = Form(0),
+    col_marca: int = Form(6),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Analiza un archivo de productos y devuelve qué se ACTUALIZARÍA, qué se
+    CREARÍA y qué se OMITIRÍA (con motivo), sin tocar la base.
+    Solo admin (por ahora la carga la hace el admin desde el detalle del comercio).
+    """
+    import io, csv, re
+
+    set_user_from_token(db, authorization)
+    if not db.is_admin():
+        raise HTTPException(status_code=403, detail="Solo administradores pueden importar productos")
+
+    # 1) Comercio (para el nombre y para cruzar sus productos)
+    com = db.supabase.table("comercio")\
+        .select("nombre_comer, plan_comer")\
+        .eq("id_comer", comercio_id).limit(1).execute()
+    if not com.data:
+        raise HTTPException(status_code=404, detail="Comercio no encontrado")
+    nombre_comer = com.data[0]["nombre_comer"]
+    plan_comer = (com.data[0].get("plan_comer") or "free").lower()
+
+    # 2) Leer y parsear el archivo
+    try:
+        contenido = await file.read()
+        texto = contenido.decode(encoding, errors="replace")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo ({encoding}): {e}")
+
+    lector = csv.reader(io.StringIO(texto), delimiter=separador)
+    filas = list(lector)
+    filas = filas[filas_saltar:] if filas_saltar > 0 else filas
+
+    # 3) Helpers
+    def celda(fila, idx):
+        return (fila[idx].strip() if 0 <= idx < len(fila) else "")
+
+    def parse_precio(s):
+        s = (s or "").strip()
+        if not s:
+            return None
+        # locale AR: punto = miles, coma = decimales
+        s = s.replace(".", "").replace(",", ".")
+        try:
+            v = float(s)
+            return v if v > 0 else None
+        except ValueError:
+            return None
+
+    def norm_nombre(s):
+        return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    def ean_valido(s):
+        s = (s or "").strip()
+        if not s or "e+" in s.lower():   # descarta notación científica (EAN roto por Excel)
+            return None
+        return s if re.fullmatch(r"\d{12,13}", s) else None
+
+    # 4) Productos que YA tiene el comercio (para clasificar)
+    existentes = db.supabase.table("producto")\
+        .select("id_prod, nombre_prod, ean_prod")\
+        .ilike("comercio_prod", nombre_comer)\
+        .eq("activo_prod", True).limit(5000).execute()
+    por_ean, por_nombre = {}, {}
+    for p in (existentes.data or []):
+        e = (p.get("ean_prod") or "").strip()
+        if e:
+            por_ean[e] = p["id_prod"]
+        n = norm_nombre(p.get("nombre_prod"))
+        if n:
+            por_nombre.setdefault(n, p["id_prod"])
+    cant_actual = len(existentes.data or [])
+
+    # 5) Clasificar
+    actualizar, crear, omitidos = [], [], []
+    for fila in filas:
+        nombre = celda(fila, col_nombre)
+        precio = parse_precio(celda(fila, col_precio))
+        ean = ean_valido(celda(fila, col_ean))
+        marca = celda(fila, col_marca)
+
+        if not nombre and precio is None:
+            continue  # fila totalmente vacía / basura: se ignora en silencio
+        if not nombre:
+            omitidos.append({"nombre": "(sin nombre)", "motivo": "fila sin nombre"})
+            continue
+        if precio is None:
+            omitidos.append({"nombre": nombre, "motivo": "sin precio"})
+            continue
+
+        item = {"nombre": nombre, "precio": precio, "ean": ean, "marca": marca}
+        if ean and ean in por_ean:
+            item["match"] = "EAN"
+            actualizar.append(item)
+        elif norm_nombre(nombre) in por_nombre:
+            item["match"] = "nombre"
+            actualizar.append(item)
+        else:
+            crear.append(item)
+
+    # 6) Chequeo de límite de plan
+    total_despues = cant_actual + len(crear)
+    excede_plan = (plan_comer == "free") and (total_despues > LIMITE_PRODUCTOS_PLAN_FREE)
+
+    return {
+        "comercio": nombre_comer,
+        "plan": plan_comer,
+        "resumen": {
+            "actualizar": len(actualizar),
+            "crear": len(crear),
+            "omitidos": len(omitidos),
+            "productos_actuales": cant_actual,
+            "total_despues": total_despues
+        },
+        "excede_plan_free": excede_plan,
+        "limite_plan_free": LIMITE_PRODUCTOS_PLAN_FREE,
+        "muestra_actualizar": actualizar[:15],
+        "muestra_crear": crear[:15],
+        "omitidos": omitidos[:50],
+        "mapeo_usado": {
+            "encoding": encoding, "separador": separador, "filas_saltar": filas_saltar,
+            "col_nombre": col_nombre, "col_precio": col_precio,
+            "col_ean": col_ean, "col_marca": col_marca
+        }
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
