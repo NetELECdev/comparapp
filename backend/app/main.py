@@ -841,6 +841,58 @@ def delete_product(
         raise HTTPException(status_code=status, detail=msg)
     return {"message": msg}
 
+
+@app.put("/api/v1/products/{product_id}/imagen", tags=["Productos"])
+def set_imagen_producto(
+    product_id: str,
+    data: dict = Body(...),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Setea imagen_prod y la PROPAGA a todos los productos que sean el mismo:
+    por EAN válido si lo tiene, si no por nombre exacto (case-insensitive),
+    en TODOS los comercios. La foto es del producto, no del comercio.
+    Permitido a admin o comercio verificado.
+    """
+    import re
+    set_user_from_token(db, authorization)
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    rol = db.get_user_role()
+    if rol not in ("admin", "comercio"):
+        raise HTTPException(status_code=403, detail="Permisos insuficientes")
+    if rol == "comercio" and not db.current_user.get("comercio_verificado_user"):
+        raise HTTPException(status_code=403, detail="Tu comercio todavía no está verificado")
+
+    imagen_url = (data.get("imagen_prod") or "").strip()
+    if not imagen_url:
+        raise HTTPException(status_code=400, detail="Falta la URL de la imagen (imagen_prod)")
+
+    base = db.supabase.table("producto")\
+        .select("id_prod, nombre_prod, ean_prod")\
+        .eq("id_prod", product_id).limit(1).execute()
+    if not base.data:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    prod = base.data[0]
+    ean = (prod.get("ean_prod") or "").strip()
+    nombre = prod.get("nombre_prod") or ""
+
+    try:
+        if ean and re.fullmatch(r"\d{12,13}", ean):
+            res = db.supabase.table("producto").update({"imagen_prod": imagen_url})\
+                .eq("ean_prod", ean).eq("activo_prod", True).execute()
+        else:
+            res = db.supabase.table("producto").update({"imagen_prod": imagen_url})\
+                .ilike("nombre_prod", nombre).eq("activo_prod", True).execute()
+        return {
+            "message": "Imagen aplicada",
+            "productos_actualizados": len(res.data or []),
+            "imagen_prod": imagen_url
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error aplicando imagen: {str(e)}")
 # ---------------------------------------------------
 # NUEVOS ENDPOINTS: HISTORIAL DE PRECIOS
 # ---------------------------------------------------
@@ -2870,6 +2922,24 @@ def register_comercio_google(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _autorizar_import(db: DatabaseManager, comercio_id: str) -> bool:
+    """
+    Permite importar si es admin, o si es un comercio verificado sobre SU PROPIO id_comer.
+    Lanza HTTPException si no corresponde. Devuelve True si es admin (sin tope de plan).
+    En esta etapa: admin + comercio. A futuro se puede dejar solo el comercio.
+    """
+    if not db.current_user:
+        raise HTTPException(status_code=401, detail="No autenticado. Iniciá sesión de nuevo.")
+    if db.is_admin():
+        return True
+    es_duenio = (
+        db.current_user.get("comercio_verificado_user") is True
+        and str(db.current_user.get("id_comer")) == str(comercio_id)
+    )
+    if not es_duenio:
+        raise HTTPException(status_code=403, detail="No tenés permiso para importar en este comercio")
+    return False
+
 # ============================================================
 #  IMPORTADOR DE PRODUCTOS POR ARCHIVO  —  endpoint de IMPORTAR
 #  Pegar en main.py junto al endpoint de preview, ANTES de
@@ -3031,16 +3101,16 @@ async def importar_productos(
     import io, csv, re
 
     set_user_from_token(db, authorization)
-    if not db.is_admin():
-        raise HTTPException(status_code=403, detail="Solo administradores pueden importar productos")
+    es_admin = _autorizar_import(db, comercio_id)
 
     # 1) Comercio (nombre para comercio_prod y para cruzar sus productos)
     com = db.supabase.table("comercio")\
-        .select("nombre_comer")\
+        .select("nombre_comer, plan_comer")\
         .eq("id_comer", comercio_id).limit(1).execute()
     if not com.data:
         raise HTTPException(status_code=404, detail="Comercio no encontrado")
     nombre_comer = com.data[0]["nombre_comer"]
+    plan_comer = (com.data[0].get("plan_comer") or "free").lower()
 
     # 2) Leer y parsear el archivo
     try:
@@ -3093,8 +3163,13 @@ async def importar_productos(
             por_nombre.setdefault(n, pid)
             tiene_ean[pid] = bool(e)
 
+    # Cupo de plan: solo aplica cuando importa el propio comercio en plan free
+    cant_actual = len(existentes.data or [])
+    aplicar_limite = (not es_admin) and (plan_comer == "free")
+    cupo_restante = (LIMITE_PRODUCTOS_PLAN_FREE - cant_actual) if aplicar_limite else None
+
     # 5) Recorrer y ejecutar
-    creados = actualizados = omitidos = duplicados = 0
+    creados = actualizados = omitidos = duplicados = omitidos_por_plan = 0
     por_rubro = {}
     errores = []
     creados_ean = set()      # EANs ya creados en ESTE archivo (evita duplicar)
@@ -3140,6 +3215,11 @@ async def importar_productos(
             duplicados += 1
             continue
 
+        # --- límite de plan: solo cuenta cuando importa el propio comercio en plan free ---
+        if cupo_restante is not None and creados >= cupo_restante:
+            omitidos_por_plan += 1
+            continue
+
         # --- CREAR: nuevo, con categoria automatica ---
         cate_id, cate_prod = clasificar_rubro(nombre)
         nuevo = {
@@ -3166,11 +3246,14 @@ async def importar_productos(
 
     return {
         "comercio": nombre_comer,
+        "plan": plan_comer,
         "creados": creados,
         "actualizados": actualizados,
         "omitidos": omitidos,
+        "omitidos_por_plan": omitidos_por_plan,
         "duplicados": duplicados,
         "errores": len(errores),
+        "limite_plan_free": LIMITE_PRODUCTOS_PLAN_FREE if aplicar_limite else None,
         "por_rubro": dict(sorted(por_rubro.items(), key=lambda kv: -kv[1])),
         "detalle_errores": errores[:30],
     }
@@ -3207,8 +3290,7 @@ async def preview_import_productos(
     import io, csv, re
 
     set_user_from_token(db, authorization)
-    if not db.is_admin():
-        raise HTTPException(status_code=403, detail="Solo administradores pueden importar productos")
+    _autorizar_import(db, comercio_id)
 
     # 1) Comercio (para el nombre y para cruzar sus productos)
     com = db.supabase.table("comercio")\
