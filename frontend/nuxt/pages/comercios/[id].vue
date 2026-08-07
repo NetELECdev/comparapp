@@ -198,8 +198,12 @@
           </button>
         </div>
 
+        <!-- IMPORTADOR DE PRODUCTOS (solo admin, comercio ya cargado) -->
+        <ImportadorProductos v-if="isAdmin" :id-comer="id" @importado="() => {}" class="animate-fade-in-up" />
+
       </template>
     </main>
+    
   </div>
 </template>
 
@@ -303,7 +307,7 @@ async function guardar() {
     await api(`/comercios/${id}`, { method: 'PUT', body: payload })
     formOriginal = { ...form }
     editando.value = false
-    successMsg.value = '✅ Proveedor actualizado correctamente'
+    successMsg.value = '✅ Comercio actualizado correctamente'
     setTimeout(() => successMsg.value = '', 3000)
   } catch (err: any) {
     errorMsg.value = err?.data?.detail || err?.message || 'Error al guardar'

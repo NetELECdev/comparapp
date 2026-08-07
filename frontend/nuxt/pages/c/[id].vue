@@ -107,6 +107,34 @@ function inicial(nombre) {
   return (nombre || '?').trim().charAt(0).toUpperCase()
 }
 
+// ── Imagen de categoría como fallback (mismo mapa que el backend /categorias)
+const SUPA_IMG = 'https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images'
+const IMG_CATEGORIA = {
+  'almacen': `${SUPA_IMG}/almacen1.jpg`,
+  'bebidas': `${SUPA_IMG}/bebidas.jpg`,
+  'carniceria': `${SUPA_IMG}/carniceria.jpg`,
+  'limpieza': `${SUPA_IMG}/limpieza.jpg`,
+  'verduleria': `${SUPA_IMG}/verduleria.jpg`,
+  'ferreteria': `${SUPA_IMG}/ferreteria.jpg`,
+  'lacteos': `${SUPA_IMG}/lacteos.jpg`,
+  'servicios': `${SUPA_IMG}/servicios1.jpg`,
+  'higiene personal': `${SUPA_IMG}/higiene-personal.jpg`,
+  'otros': `${SUPA_IMG}/almacen1.jpg`,
+}
+
+// Cascada: foto propia → imagen de categoría → (si falla la carga) avatar de inicial
+const thumbsFallidos = ref(new Set())
+function thumbProducto(p) {
+  if (thumbsFallidos.value.has(p.id_prod)) return ''
+  return p.imagen_prod || IMG_CATEGORIA[(p.cate_prod || '').toLowerCase().trim()] || ''
+}
+function onThumbError(id) {
+  const s = new Set(thumbsFallidos.value)
+  s.add(id)
+  thumbsFallidos.value = s
+}
+
+
 // ── Compartir (usa ?ref para atribución) + Cómo llegar
 const compartidoOk = ref(false)
 function linkCompartir() {
@@ -237,7 +265,7 @@ async function initMapa() {
           <div v-else-if="productosFiltrados.length" class="grilla">
             <article v-for="p in productosFiltrados" :key="p.id_prod" class="card">
               <div class="card-img">
-                <img v-if="p.imagen_prod" :src="p.imagen_prod" :alt="p.nombre_prod" loading="lazy" />
+                <img v-if="thumbProducto(p)" :src="thumbProducto(p)" :alt="p.nombre_prod" loading="lazy" @error="onThumbError(p.id_prod)" />
                 <div v-else class="img-ph">{{ inicial(p.nombre_prod) }}</div>
               </div>
               <div class="card-body">

@@ -1470,12 +1470,10 @@ def update_oferta(
         raise HTTPException(status_code=403, detail="Solo administradores pueden actualizar ofertas")
 
     try:
-        # Recalcular descuento si cambiaron precios
-        if 'precio_normal' in oferta_data and 'precio_oferta' in oferta_data:
-            precio_normal = float(oferta_data['precio_normal'])
-            precio_oferta = float(oferta_data['precio_oferta'])
-            if precio_normal > 0:
-                oferta_data['descuento_pct'] = round((precio_normal - precio_oferta) / precio_normal * 100)
+        # descuento_pct es una columna generada: la base la calcula sola a partir
+        # de precio_normal y precio_oferta. Si la mandamos en el update, Postgres
+        # rechaza con "can only be updated to DEFAULT". Por eso la quitamos del payload.
+        oferta_data.pop('descuento_pct', None)
 
         response = db.supabase.table('ofertas').update(oferta_data).eq('id', oferta_id).execute()
 
@@ -2973,6 +2971,7 @@ REGLAS_CATEGORIA = [
     ("EXTRACTO DE TOMATE", 1, "Almacen"), ("DULCE DE LECHE", 8, "Lacteos"),
     ("PAPAS FRITAS", 1, "Almacen"), ("QUESO CREMA", 8, "Lacteos"),
     ("ALCOHOL EN GEL", 11, "Higiene Personal"),
+    ("ALCOHOL EN AEROSOL", 11, "Higiene Personal"),
     ("BOLSA PARA HORNO", 1, "Almacen"), ("BOLSAS PARA HORNO", 1, "Almacen"),
     ("CREMA DE LECHE", 8, "Lacteos"), ("CREMA PARA BATIR", 8, "Lacteos"),
     ("CREMA CORPORAL", 11, "Higiene Personal"), ("CREMA DE MANOS", 11, "Higiene Personal"),
@@ -3038,6 +3037,7 @@ REGLAS_CATEGORIA = [
     ("RECARGA", 10, "Servicios"), ("SALDO", 10, "Servicios"), ("CARGA VIRTUAL", 10, "Servicios"),
     # --- Almacen (lo mas generico al final) ---
     ("ACEITE", 1, "Almacen"), ("ARROZ", 1, "Almacen"), ("FIDEO", 1, "Almacen"),
+    ("FIDEOS", 1, "Almacen"),
     ("HARINA", 1, "Almacen"), ("YERBA", 1, "Almacen"), ("AZUCAR", 1, "Almacen"),
     ("POLENTA", 1, "Almacen"), ("LENTEJA", 1, "Almacen"), ("POROTO", 1, "Almacen"),
     ("GARBANZO", 1, "Almacen"), ("GALLETITA", 1, "Almacen"), ("GALLETA", 1, "Almacen"),

@@ -1230,13 +1230,22 @@ async function guardarOferta(p: Producto) {
 
     if (ofertaActiva) {
       // Actualizar existente
-      await $fetch(`${config.public.apiBase}/ofertas/${ofertaActiva.id}`, { method: 'PUT', body: payload })
+      await $fetch(`${config.public.apiBase}/ofertas/${ofertaActiva.id}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       showToast('Oferta actualizada')
     } else {
       // Crear nueva
-      await $fetch(`${config.public.apiBase}/ofertas`, { method: 'POST', body: payload })
+      await $fetch(`${config.public.apiBase}/ofertas`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: payload
+      })
       showToast('🔥 Oferta activada')
     }
+
     ofertaPanelProductoId.value = null
     await loadOfertas()
   } catch (err: any) {
@@ -1256,7 +1265,10 @@ async function desactivarOferta(p: Producto) {
 async function desactivarOfertaById(oferta: Oferta) {
   savingOferta.value = true
   try {
-    await $fetch(`${config.public.apiBase}/ofertas/${oferta.id}`, { method: 'DELETE' })
+    await $fetch(`${config.public.apiBase}/ofertas/${oferta.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
     showToast('Oferta desactivada')
     await loadOfertas()
   } catch (err: any) {

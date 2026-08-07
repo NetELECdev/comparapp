@@ -81,12 +81,13 @@
 
         <div v-else class="productos-lista animate-fade-in-up stagger-2">
           <article v-for="p in productosFiltrados" :key="p.id_prod" class="producto-item">
-            <img :src="p.imagen_prod || '/images/avatar_default.png'" class="item-thumb" @error="(e) => (e.target as HTMLImageElement).src = '/images/avatar_default.png'" />
+            <img :src="thumbProducto(p)" class="item-thumb" @error="(e) => (e.target as HTMLImageElement).src = '/images/avatar_default.png'" />
             <div class="item-info">
               <span class="item-name">{{ p.nombre_prod }}</span>
               <span class="item-meta">{{ p.marca_prod }} · {{ p.cate_prod }}</span>
               <span class="item-price">${{ formatPrice(p.precio_prod) }}</span>
             </div>
+            <CodigoBarras :ean="p.ean_prod" :height="28" :font-size="9" class="item-ean" />
             <button class="item-edit" @click="editarProducto(p)" aria-label="Editar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
             </button>
@@ -95,6 +96,24 @@
             </button>
           </article>
         </div>
+        
+        <ImportadorProductos
+          v-if="miComercio"
+          :id-comer="miComercio.id_comer"
+          @importado="cargarProductos"
+        />
+
+        <ImagenesPendientes
+          :productos="productos"
+          :imagen-por-categoria="imagenPorCategoria"
+          @actualizado="cargarProductos"
+        />
+
+        <CodigosPendientes
+          :productos="productos"
+          :imagen-por-categoria="imagenPorCategoria"
+          @actualizado="cargarProductos"
+        />
       </template>
 
       <div v-else class="state-box">
@@ -151,6 +170,12 @@
 
             <!-- Comercio: fijo, no editable — siempre el del usuario logueado -->
             <div class="form-group full">
+              <label>Código de barras (EAN)</label>
+              <input v-model="form.ean_prod" type="text" inputmode="numeric" maxlength="13" placeholder="Ej: 7790895000997 (opcional, dejalo vacío si no tiene)" />
+              <small v-if="eanError" class="form-hint-err">{{ eanError }}</small>
+            </div>
+
+            <div class="form-group full">
               <label>Comercio</label>
               <input :value="miComercio?.nombre_comer" disabled class="input-disabled" />
               <p class="form-hint">Tus productos se cargan automáticamente a tu comercio</p>
@@ -167,7 +192,7 @@
               <div class="image-upload-wrap">
                 <div v-if="form.imagen_prod" class="image-preview">
                   <img :src="form.imagen_prod" />
-                  <button type="button" class="image-remove" @click="form.imagen_prod = ''">
+                  <button type="button" class="image-remove" @click="form.imagen_prod = ''; imagenCambiada = true">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                   </button>
                 </div>
@@ -246,6 +271,7 @@ interface Producto {
   describe_prod?: string | null
   imagen_prod: string | null
   activo_prod: boolean
+  ean_prod?: string | null
 }
 
 const config = useRuntimeConfig()
@@ -260,7 +286,7 @@ const subiendoLogo = ref(false)
 const productos = ref<Producto[]>([])
 const loadingProductos = ref(true)
 const searchQuery = ref('')
-const categorias = ref<{ id: number; nombre: string }[]>([])
+const categorias = ref<{ id: number; nombre: string; icono?: string }[]>([])
 const medidas = ref<{ id: number; nombre: string }[]>([])
 
 const modalOpen = ref(false)
@@ -269,11 +295,12 @@ const eliminandoId = ref<string | null>(null)
 const productoAEliminar = ref<Producto | null>(null)
 const guardando = ref(false)
 const subiendoImagen = ref(false)
+const imagenCambiada = ref(false)
 const errorMsg = ref('')
 
 const form = ref<Partial<Producto>>({
   nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
-  cantidad_prod: 1, unidad_prod: 'Unidad', describe_prod: '', imagen_prod: '', activo_prod: true
+  cantidad_prod: 1, unidad_prod: 'Unidad', describe_prod: '', imagen_prod: '', ean_prod: '', activo_prod: true
 })
 
 function getToken() {
@@ -283,8 +310,39 @@ function getToken() {
   } catch { return '' }
 }
 
+const eanError = ref('')
+function eanValido(code: string): boolean {
+  const s = (code || '').trim()
+  if (!/^\d+$/.test(s)) return false
+  if (s.length !== 13 && s.length !== 8) return false
+  const digits = s.split('').map(Number)
+  const check = digits.pop() as number
+  const empiezaEn3 = s.length === 8
+  let suma = 0
+  digits.forEach((d, i) => {
+    const peso = (i % 2 === 0) ? (empiezaEn3 ? 3 : 1) : (empiezaEn3 ? 1 : 3)
+    suma += d * peso
+  })
+  return ((10 - (suma % 10)) % 10) === check
+}
+
 function formatPrice(p: string | number) {
   return Number(p).toLocaleString('es-AR')
+}
+
+// Imagen de categoría como fallback cuando el producto no tiene foto propia
+const imagenPorCategoria = computed(() => {
+  const map: Record<string, string> = {}
+  for (const c of categorias.value) {
+    if (c.nombre && c.icono) map[c.nombre.toLowerCase().trim()] = c.icono
+  }
+  return map
+})
+
+function thumbProducto(p: Producto): string {
+  if (p.imagen_prod) return p.imagen_prod
+  const catImg = imagenPorCategoria.value[(p.cate_prod || '').toLowerCase().trim()]
+  return catImg || '/images/avatar_default.png'
 }
 
 const productosFiltrados = computed(() => {
@@ -333,7 +391,7 @@ async function cargarCategoriasYMedidas() {
       $fetch<any[]>(`${config.public.apiBase}/categorias`).catch(() => []),
       $fetch<any[]>(`${config.public.apiBase}/medidas`).catch(() => [])
     ])
-    categorias.value = (catsRes || []).map((c: any) => ({ id: c.id_cate, nombre: c.nombre_cate }))
+    categorias.value = (catsRes || []).map((c: any) => ({ id: c.id_cate, nombre: c.nombre_cate, icono: c.icono_cate }))
     medidas.value = medidasRes || []
   } catch (err) {
     console.error('Error cargando categorías/medidas:', err)
@@ -343,9 +401,10 @@ async function cargarCategoriasYMedidas() {
 function abrirModalNuevo() {
   editandoId.value = null
   errorMsg.value = ''
+  imagenCambiada.value = false
   form.value = {
     nombre_prod: '', cate_prod: '', marca_prod: '', precio_prod: '',
-    cantidad_prod: 1, unidad_prod: 'Unidad', describe_prod: '', imagen_prod: '', activo_prod: true
+    cantidad_prod: 1, unidad_prod: 'Unidad', describe_prod: '', imagen_prod: '', ean_prod: '', activo_prod: true
   }
   modalOpen.value = true
 }
@@ -354,6 +413,7 @@ function editarProducto(p: Producto) {
   editandoId.value = p.id_prod
   errorMsg.value = ''
   form.value = { ...p }
+  imagenCambiada.value = false
   modalOpen.value = true
 }
 
@@ -404,6 +464,7 @@ async function subirImagen(e: Event) {
       body: formData
     })
     form.value.imagen_prod = res.url
+    imagenCambiada.value = true
   } catch (err: any) {
     errorMsg.value = err?.data?.detail || 'No se pudo subir la imagen'
   } finally {
@@ -456,6 +517,7 @@ async function guardarProducto() {
       comercio_prod: miComercio.value.nombre_comer,
       describe_prod: form.value.describe_prod?.trim() || null,
       imagen_prod: form.value.imagen_prod?.trim() || null,
+      ean_prod: (form.value.ean_prod || '').trim() || null,
       activo_prod: !!form.value.activo_prod,
     }
 
@@ -465,12 +527,33 @@ async function guardarProducto() {
       return
     }
 
+    if (payload.ean_prod && !eanValido(payload.ean_prod)) {
+      eanError.value = 'No es un EAN válido: tiene que ser de 8 o 13 dígitos y con el dígito verificador correcto. Dejalo vacío si el producto no tiene código de barras.'
+      errorMsg.value = 'Revisá el código de barras.'
+      guardando.value = false
+      return
+    }
+    eanError.value = ''
+
     if (editandoId.value) {
       await $fetch(`${config.public.apiBase}/products/${editandoId.value}`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
         body: payload
       })
+      // Foto compartida por producto: si cambió la imagen en esta edición,
+      // se propaga al mismo producto en todos los comercios (endpoint dedicado).
+      if (imagenCambiada.value && payload.imagen_prod) {
+        try {
+          await $fetch(`${config.public.apiBase}/products/${editandoId.value}/imagen`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}` },
+            body: { imagen_prod: payload.imagen_prod }
+          })
+        } catch (e) {
+          console.error('No se pudo propagar la imagen a otros comercios:', e)
+        }
+      }
     } else {
       await $fetch(`${config.public.apiBase}/products`, {
         method: 'POST',
@@ -602,6 +685,7 @@ onMounted(async () => {
 }
 .item-thumb { width: 48px; height: 48px; border-radius: var(--radius-sm); object-fit: cover; background: var(--bg-card-hover); flex-shrink: 0; }
 .item-info { flex: 1; display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.item-ean { flex-shrink: 0; }
 .item-name { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .item-meta { font-size: 0.75rem; color: var(--text-secondary); }
 .item-price { font-size: 0.85rem; font-weight: 700; color: var(--accent-gold); }
@@ -648,6 +732,7 @@ onMounted(async () => {
 .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
 .form-group.full { grid-column: 1 / -1; }
 .form-group label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+.form-hint-err { color: #fb7185; font-size: 0.72rem; }
 .form-group input, .form-group select, .form-group textarea {
   padding: 0.65rem 0.875rem; border-radius: var(--radius-sm);
   background: var(--bg-input); border: 1px solid var(--border-subtle);
