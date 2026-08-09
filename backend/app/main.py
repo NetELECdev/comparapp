@@ -116,7 +116,7 @@ app.add_middleware(
 # ---------------------------------------------------
 # Routers
 # ---------------------------------------------------
-from app.routers.products_images_router import router as images_router
+from routers.products_images_router import router as images_router
 app.include_router(images_router)
 
 
