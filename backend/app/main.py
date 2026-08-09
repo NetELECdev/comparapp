@@ -111,12 +111,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
-    # ---------------------------------------------------
-    # Routers
-    # ---------------------------------------------------
-    from app.routers.products_images_router import router as images_router
-    app.include_router(images_router)
 )
+
+# ---------------------------------------------------
+# Routers
+# ---------------------------------------------------
+from app.routers.products_images_router import router as images_router
+app.include_router(images_router)
+
 
 # Instancia usada solo para tareas de arranque/apagado del servidor
 # (ver shutdown_event más abajo). NO se usa para atender requests —
