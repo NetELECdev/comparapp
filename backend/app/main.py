@@ -111,6 +111,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+    # ---------------------------------------------------
+    # Routers
+    # ---------------------------------------------------
+    from app.routers.products_images_router import router as images_router
+    app.include_router(images_router)
 )
 
 # Instancia usada solo para tareas de arranque/apagado del servidor
@@ -706,7 +711,7 @@ def get_all_products(
         params = {
             "select": "*",
             "activo_prod": "eq.true",
-            "limit": limit or 200
+            "limit": limit or 5000
         }
 
         if q and q.strip():
@@ -2718,12 +2723,40 @@ async def upload_imagen_producto(
 
     try:
         contenido = await file.read()
-        nombre_archivo = f"productos/{uuid.uuid4()}.{ext}"
+
+        # --- Optimización: redimensionar y comprimir a JPEG liviano ---
+        # Reduce fotos de varios MB (cámara de celular) a ~30-60KB, sin perder
+        # calidad visible en la vitrina. Ahorra storage y acelera la carga.
+        from io import BytesIO
+        from PIL import Image, ImageOps
+
+        MAX_W, MAX_H = 800, 800   # lado máximo; suficiente para la ficha de producto
+        try:
+            img = Image.open(BytesIO(contenido))
+            img = ImageOps.exif_transpose(img)          # respeta orientación del celular
+            if img.mode in ("RGBA", "P", "LA"):
+                fondo = Image.new("RGB", img.size, (255, 255, 255))
+                img_rgb = img.convert("RGBA")
+                fondo.paste(img_rgb, mask=img_rgb.split()[-1])  # aplana transparencia sobre blanco
+                img = fondo
+            else:
+                img = img.convert("RGB")
+            img.thumbnail((MAX_W, MAX_H), Image.LANCZOS)
+
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=82, optimize=True)
+            contenido = buf.getvalue()
+        except Exception as e_opt:
+            # Si por lo que sea no se puede optimizar, subimos el original.
+            print(f"⚠️ No se pudo optimizar la imagen, se sube el original: {e_opt}")
+
+        # Tras optimizar, siempre queda como .jpg
+        nombre_archivo = f"productos/{uuid.uuid4()}.jpg"
 
         db.supabase.storage.from_("product-images").upload(
             nombre_archivo,
             contenido,
-            {"content-type": file.content_type or "image/jpeg"}
+            {"content-type": "image/jpeg"}
         )
 
         url_publica = db.supabase.storage.from_("product-images").get_public_url(nombre_archivo)
