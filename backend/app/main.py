@@ -1641,6 +1641,120 @@ def get_products_by_category(
 
 
 # ---------------------------------------------------
+# SUBIDA DE IMAGENES A BUCKET (herramienta admin / extension Chrome)
+# ---------------------------------------------------
+
+class UploadBucketBody(BaseModel):
+    imagen_base64: str
+    nombre: str
+    bucket: Optional[str] = "product-images"
+    carpeta: Optional[str] = ""
+    optimizar: Optional[bool] = True
+    content_type: Optional[str] = "image/jpeg"
+
+@app.post("/api/v1/admin/upload-a-bucket", tags=["Admin"])
+def upload_a_bucket(
+    body: UploadBucketBody,
+    x_api_key: Optional[str] = Header(None),
+):
+    """
+    Sube una imagen (base64) a un bucket de Supabase Storage.
+    Auth por clave propia (UPLOAD_API_KEY) para la extension de admin.
+    Devuelve la URL publica del archivo.
+    """
+    import re
+    import base64
+    import requests
+
+    # 1. Auth por clave secreta
+    api_key_esperada = os.getenv("UPLOAD_API_KEY")
+    if not api_key_esperada:
+        raise HTTPException(status_code=503, detail="UPLOAD_API_KEY no configurada en el servidor")
+    if not x_api_key or x_api_key != api_key_esperada:
+        raise HTTPException(status_code=401, detail="Clave de API invalida")
+
+    # 2. Decodificar (acepta data-URI o base64 puro)
+    raw = body.imagen_base64.strip()
+    content_type = body.content_type or "image/jpeg"
+    if raw.startswith("data:"):
+        try:
+            cabecera, raw = raw.split(",", 1)
+            m = re.search(r"data:([^;]+);", cabecera)
+            if m:
+                content_type = m.group(1)
+        except ValueError:
+            pass
+    try:
+        image_bytes = base64.b64decode(raw)
+    except Exception:
+        raise HTTPException(status_code=400, detail="imagen_base64 invalida")
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Imagen vacia")
+
+    # 3. Optimizacion opcional (Pillow: 800x800, JPEG q82)
+    if body.optimizar:
+        try:
+            import io
+            from PIL import Image, ImageOps
+            img = Image.open(io.BytesIO(image_bytes))
+            img = ImageOps.exif_transpose(img)
+            if img.mode in ("RGBA", "LA", "P"):
+                fondo = Image.new("RGB", img.size, (255, 255, 255))
+                img = img.convert("RGBA")
+                fondo.paste(img, mask=img.split()[-1])
+                img = fondo
+            else:
+                img = img.convert("RGB")
+            img.thumbnail((800, 800), Image.LANCZOS)
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=82, optimize=True)
+            image_bytes = out.getvalue()
+            content_type = "image/jpeg"
+        except Exception as e:
+            print(f"⚠️ Optimizacion fallo, se sube original: {e}")
+
+    # 4. Path seguro + extension coherente
+    ext_por_mime = {
+        "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+        "image/webp": "webp", "image/gif": "gif",
+    }
+    ext = ext_por_mime.get(content_type, "jpg")
+    nombre = re.sub(r"[^a-zA-Z0-9._-]", "-", (body.nombre or "imagen").strip()).strip("-.") or "imagen"
+    nombre = re.sub(r"\.(jpg|jpeg|png|webp|gif)$", "", nombre, flags=re.I)
+    nombre = f"{nombre}.{ext}"
+
+    carpeta = re.sub(r"[^a-zA-Z0-9._/-]", "-", (body.carpeta or "").strip().strip("/"))
+    path = f"{carpeta}/{nombre}" if carpeta else nombre
+    bucket = (body.bucket or "product-images").strip().strip("/")
+
+    # 5. Subir via REST con service role
+    service_key = SupabaseConfig.get_service_key()
+    base_url = SupabaseConfig.get_url()
+    upload_url = f"{base_url}/storage/v1/object/{bucket}/{path}"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+    try:
+        resp = requests.post(upload_url, headers=headers, data=image_bytes, timeout=30)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error de red al subir: {e}")
+    if resp.status_code not in (200, 201):
+        raise HTTPException(status_code=502, detail=f"Storage rechazo la subida ({resp.status_code}): {resp.text}")
+
+    public_url = f"{base_url}/storage/v1/object/public/{bucket}/{path}"
+    return {
+        "success": True,
+        "bucket": bucket,
+        "path": path,
+        "content_type": content_type,
+        "bytes": len(image_bytes),
+        "public_url": public_url,
+    }
+
+# ---------------------------------------------------
 # Health Check
 # ---------------------------------------------------
 
