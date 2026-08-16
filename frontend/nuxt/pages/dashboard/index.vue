@@ -458,9 +458,9 @@ function irAItemParaVos(item: ParaVosItem) {
 
 // Estructura fiel al dashV1: imagen ilustrativa + título debajo
 // Distribución masonry: columna izquierda y derecha con tamaños variables
-const menuItems = ref([
-  { title: 'Admin',       imageUrl: `${SUPABASE}/admin.jpg`,       action: () => navigateTo('/admin') },
-])
+// Los accesos admin se agregan solo en el navegador si el usuario es admin (ver onMounted).
+// Arrancan vacíos para que NO queden "horneados" en el HTML estático del build.
+const menuItems = ref<any[]>([])
 
 onMounted(async () => {
   const stored = localStorage.getItem('comparapp_user')
@@ -476,8 +476,13 @@ onMounted(async () => {
     solicitarUbicacion()
   }
 
-  if (!user.value || user.value.rol !== 'admin') {
-    menuItems.value = menuItems.value.filter(p => p.title !== 'Admin')
+  // Acepta el rol venga como 'rol' o 'rol_user' (según cómo quedó guardado el usuario)
+  const rolUsuario = user.value?.rol ?? user.value?.rol_user
+  if (rolUsuario === 'admin') {
+    menuItems.value = [
+      { title: 'Admin',   imageUrl: `${SUPABASE}/AdminP.png`, action: () => navigateTo('/admin') },
+      { title: 'Gestión', imageUrl: `${SUPABASE}/AdminP.png`, action: () => navigateTo('/admin/gestion-comercios') },
+    ]
   }
 
   // Cargar "Para vos": ofertas activas + productos destacados + búsquedas recientes, mezclados

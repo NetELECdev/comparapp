@@ -747,7 +747,7 @@ class DatabaseManager:
                 response = self.supabase.table('producto')\
                     .select('*')\
                     .eq('activo_prod', True)\
-                    .limit(limit or 200)\
+                    .limit(limit or 5000)\
                     .execute()
             
             if response.data:

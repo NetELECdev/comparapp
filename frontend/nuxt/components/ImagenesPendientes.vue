@@ -14,6 +14,17 @@
       </p>
     </header>
 
+      <div class="ip-progreso">
+        <div class="ip-progreso-texto">
+          <span><strong>{{ totalConImagen }}</strong> de <strong>{{ totalProductos }}</strong> con foto</span>
+          <span>faltan <strong>{{ pendientes.length }}</strong></span>
+        </div>
+        <div class="ip-progreso-barra">
+          <div class="ip-progreso-relleno" :style="{ width: porcentaje + '%' }"></div>
+        </div>
+      </div>
+
+
     <!-- Nada pendiente -->
     <div v-if="!pendientes.length" class="ip-empty">
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -24,7 +35,7 @@
 
     <!-- Grilla de pendientes -->
     <div v-else class="ip-grid">
-      <article v-for="p in pendientes" :key="p.id_prod" class="ip-card">
+      <article v-for="p in pendientesVisibles" :key="p.id_prod" class="ip-card">
         <div class="ip-thumb">
           <img :src="thumb(p)" :alt="p.nombre_prod" />
           <div v-if="subiendoId === p.id_prod" class="ip-thumb-overlay">
@@ -50,6 +61,14 @@
         </label>
       </article>
     </div>
+
+    <button
+      v-if="pendientes.length > visibles"
+      class="ip-mostrar-mas"
+      @click="mostrarMas"
+    >
+      Mostrar más ({{ pendientes.length - visibles }} restantes)
+    </button>
 
     <p v-if="errorMsg" class="ip-error">{{ errorMsg }}</p>
     <p v-if="okMsg" class="ip-ok">{{ okMsg }}</p>
@@ -84,10 +103,23 @@ const subiendoId = ref<string | null>(null)
 const errorMsg = ref('')
 const okMsg = ref('')
 
+const totalConImagen = computed(() =>
+  (props.productos || []).filter(p => p.imagen_prod).length
+)
+const totalProductos = computed(() => (props.productos || []).length)
+const porcentaje = computed(() =>
+  totalProductos.value ? Math.round(totalConImagen.value * 100 / totalProductos.value) : 0
+)
+
 // Solo los productos SIN foto propia
 const pendientes = computed(() =>
   (props.productos || []).filter(p => !p.imagen_prod)
 )
+
+// Paginación: mostrar de a 24
+const visibles = ref(24)
+const pendientesVisibles = computed(() => pendientes.value.slice(0, visibles.value))
+function mostrarMas() { visibles.value += 24 }
 
 function getToken(): string {
   try {
@@ -163,7 +195,20 @@ async function onArchivo(e: Event, p: Producto) {
   padding: 1.25rem;
   color: var(--text-primary, #f4f4f5);
 }
-
+.ip-progreso { margin: 0 0 1rem; }
+.ip-progreso-texto {
+  display: flex; justify-content: space-between;
+  font-size: 0.82rem; color: var(--text-secondary, #a1a1aa); margin-bottom: 0.4rem;
+}
+.ip-progreso-texto strong { color: var(--text-primary, #f4f4f5); }
+.ip-progreso-barra {
+  height: 8px; border-radius: 999px;
+  background: var(--bg-input, rgba(255,255,255,0.08)); overflow: hidden;
+}
+.ip-progreso-relleno {
+  height: 100%; border-radius: 999px;
+  background: var(--accent-gold, #e8c4a0); transition: width 0.4s ease;
+}
 .ip-header { margin-bottom: 1rem; }
 .ip-title {
   display: flex; align-items: center; gap: 0.5rem;
@@ -244,4 +289,13 @@ async function onArchivo(e: Event, p: Producto) {
 
 .ip-error { color: #fb7185; font-size: 0.85rem; margin: 0.75rem 0 0; }
 .ip-ok { color: #4ade80; font-size: 0.85rem; margin: 0.75rem 0 0; }
+
+.ip-mostrar-mas {
+  display: block; width: 100%; margin-top: 1rem; padding: 0.7rem;
+  border-radius: 10px; cursor: pointer;
+  background: var(--bg-input, rgba(255,255,255,0.05));
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.15));
+  color: var(--text-primary, #f4f4f5); font-size: 0.88rem; font-weight: 600;
+}
+.ip-mostrar-mas:hover { background: rgba(255,255,255,0.1); }
 </style>

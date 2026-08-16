@@ -375,7 +375,7 @@ async function cargarProductos() {
   try {
     const res = await $fetch<{ count: number; results: Producto[] }>(
       `${config.public.apiBase}/products`,
-      { params: { comercio: miComercio.value.nombre_comer, limit: 200 } }
+      { params: { comercio: miComercio.value.nombre_comer, limit: 5000 } }
     )
     productos.value = res.results || []
   } catch (err) {

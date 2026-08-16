@@ -24,7 +24,7 @@
 
     <!-- Grilla de pendientes -->
     <div v-else class="cp-grid">
-      <article v-for="p in pendientes" :key="p.id_prod" class="cp-card">
+      <article v-for="p in pendientesVisibles" :key="p.id_prod" class="cp-card">
         <div class="cp-cardhead">
           <img :src="thumb(p)" :alt="p.nombre_prod" class="cp-thumb" />
           <div class="cp-info">
@@ -66,6 +66,14 @@
         <p v-if="errores[p.id_prod]" class="cp-carderr">{{ errores[p.id_prod] }}</p>
       </article>
     </div>
+
+    <button
+      v-if="pendientes.length > visiblesCp"
+      class="cp-mostrar-mas"
+      @click="mostrarMasCp"
+    >
+      Mostrar más ({{ pendientes.length - visiblesCp }} restantes)
+    </button>
 
     <p v-if="okMsg" class="cp-ok">{{ okMsg }}</p>
 
@@ -125,6 +133,11 @@ const errores = reactive<Record<string, string>>({})
 const pendientes = computed(() =>
   (props.productos || []).filter(p => !p.ean_prod)
 )
+
+// Paginación: mostrar de a 24
+const visiblesCp = ref(24)
+const pendientesVisibles = computed(() => pendientes.value.slice(0, visiblesCp.value))
+function mostrarMasCp() { visiblesCp.value += 24 }
 
 function getToken(): string {
   try {
@@ -402,4 +415,13 @@ onBeforeUnmount(cerrarScanner)
 }
 .cp-scanner-hint { text-align: center; color: #a1a1aa; font-size: 0.82rem; margin: 0.75rem 0 0; }
 .cp-scanner-err { text-align: center; color: #fb7185; font-size: 0.85rem; margin: 0.75rem 0 0; }
+
+.cp-mostrar-mas {
+  display: block; width: 100%; margin-top: 1rem; padding: 0.7rem;
+  border-radius: 10px; cursor: pointer;
+  background: var(--bg-input, rgba(255,255,255,0.05));
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.15));
+  color: var(--text-primary, #f4f4f5); font-size: 0.88rem; font-weight: 600;
+}
+.cp-mostrar-mas:hover { background: rgba(255,255,255,0.1); }
 </style>
