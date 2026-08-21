@@ -737,7 +737,66 @@ def get_all_products(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
 
-# 4. GET /api/v1/products/{product_id}/same-name — MISMO NOMBRE (dinamico)
+# 2.6 GET /api/v1/products/images-by-name — Imágenes disponibles para un nombre de producto
+# Debe ir ANTES de /products/{product_id} para no ser capturada como product_id literal.
+@app.get("/api/v1/products/images-by-name", tags=["Productos"])
+def get_images_by_name(
+    nombre: str = Query(..., min_length=1, description="Nombre exacto del producto (case-insensitive)"),
+    exclude_id: Optional[str] = Query(None, description="id_prod a excluir del resultado (el que se está editando)"),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Busca productos con el mismo nombre (match exacto, sin distinguir mayúsculas)
+    en cualquier comercio que ya tengan imagen cargada. Sirve para reutilizar
+    la foto de un producto entre comercios distintos sin repetir la carga.
+    """
+    try:
+        import requests
+
+        rest_url = f"{SupabaseConfig.get_url()}/rest/v1"
+        service_key = os.getenv('SUPABASE_SERVICE_KEY', SupabaseConfig.get_anon_key())
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json"
+        }
+
+        url = f"{rest_url}/producto"
+        params = {
+            "select": "id_prod,comercio_prod,imagen_prod,marca_prod",
+            "nombre_prod": f"ilike.{nombre.strip()}",
+            "activo_prod": "eq.true",
+            "imagen_prod": "not.is.null"
+        }
+
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Supabase error: {response.text[:500]}")
+
+        productos = response.json()
+        if exclude_id:
+            productos = [p for p in productos if p.get('id_prod') != exclude_id]
+
+        # Deduplicar por comercio+imagen (puede haber más de un producto igual en el mismo comercio)
+        vistos = set()
+        opciones = []
+        for p in productos:
+            if not p.get('imagen_prod'):
+                continue
+            clave = (p.get('comercio_prod'), p.get('imagen_prod'))
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            opciones.append(p)
+
+        return {"count": len(opciones), "results": opciones}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error buscando imágenes: {str(e)}")
+
+
+
 @app.get("/api/v1/products/{product_id}/same-name", tags=["Productos"])
 def get_same_name_products(
     product_id: str,
@@ -3339,20 +3398,18 @@ async def importar_productos(
 
         nnorm = norm_nombre(nombre)
 
-        # --- match contra lo que YA existe en la base ---
-        pid = None
-        matched_by = None
-        if ean and ean in por_ean:
-            pid, matched_by = por_ean[ean], "ean"
-        elif nnorm in por_nombre:
-            pid, matched_by = por_nombre[nnorm], "nombre"
+                # --- match contra lo que YA existe: SOLO por EAN ---
+        # (los nombres se están corrigiendo, así que el match por nombre
+        #  crearía duplicados; por eso lo eliminamos.)
+        if not ean:
+            omitidos_sin_ean += 1
+            continue
+
+        pid = por_ean.get(ean)
 
         if pid:
-            # --- ACTUALIZAR: precio (+ backfill de EAN si faltaba) ---
-            cambios = {"precio_prod": precio}
-            if ean and matched_by == "nombre" and not tiene_ean.get(pid, False):
-                cambios["ean_prod"] = ean
-            ok, msg = db.update_product(pid, cambios)
+            # --- ACTUALIZAR: solo el precio ---
+            ok, msg = db.update_product(pid, {"precio_prod": precio})
             if ok:
                 actualizados += 1
             else:
@@ -3554,6 +3611,159 @@ async def preview_import_productos(
         }
     }
 
+# ============================================================
+#  BACKFILL DE EAN  —  endpoint de una sola vez
+#  Pegar en main.py junto a los otros endpoints de "Comercio Import",
+#  ANTES de  `if __name__ == "__main__":`.
+#
+#  Para qué sirve:
+#  Rellena ean_prod en los productos YA cargados del comercio que
+#  todavía no lo tengan, tomando el EAN del CSV y matcheando por
+#  NOMBRE normalizado. Está pensado para correr UNA vez, antes de
+#  pasar el importador a "match solo-EAN".
+#
+#  Seguridad de datos:
+#  - NO pisa EAN existentes: solo toca productos con ean_prod vacío.
+#  - dry_run=True por DEFECTO: primero previsualiza, no escribe nada.
+#    Revisás el reporte y, si está OK, lo volvés a correr con
+#    dry_run=false para aplicar.
+#  - No asigna el mismo EAN a dos productos distintos en la misma corrida.
+#  - Update directo (solo ean_prod): no toca fecha_prod ni el historial.
+#
+#  ⚠️ El match es por NOMBRE. Corré esto con un CSV cuyos nombres
+#     coincidan con los de la base ACTUAL. Si ya corregiste nombres,
+#     esos productos van a quedar en "sin_match_en_csv" y hay que
+#     resolverlos aparte.
+# ============================================================
+
+@app.post("/api/v1/comercios/{comercio_id}/productos/backfill-ean", tags=["Comercio Import"])
+async def backfill_ean_productos(
+    comercio_id: str,
+    file: UploadFile = File(...),
+    # --- Mapeo (mismo preset que el importador; columnas en base 0) ---
+    encoding: str = Form("latin-1"),
+    separador: str = Form(";"),
+    filas_saltar: int = Form(5),
+    col_nombre: int = Form(2),
+    col_ean: int = Form(0),
+    # --- Seguridad: por defecto NO escribe, solo informa ---
+    dry_run: bool = Form(True),
+    authorization: Optional[str] = Header(None),
+    db: DatabaseManager = Depends(get_db)
+):
+    """
+    Rellena ean_prod (por nombre) en los productos del comercio que no lo tengan.
+    dry_run=True (default) => no escribe, solo devuelve qué haría.
+    Solo admin o comercio verificado sobre su propio id_comer.
+    """
+    import io, csv, re
+
+    set_user_from_token(db, authorization)
+    _autorizar_import(db, comercio_id)
+
+    # 1) Comercio (nombre para cruzar sus productos)
+    com = db.supabase.table("comercio")\
+        .select("nombre_comer")\
+        .eq("id_comer", comercio_id).limit(1).execute()
+    if not com.data:
+        raise HTTPException(status_code=404, detail="Comercio no encontrado")
+    nombre_comer = com.data[0]["nombre_comer"]
+
+    # 2) Leer y parsear el archivo
+    try:
+        contenido = await file.read()
+        texto = contenido.decode(encoding, errors="replace")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo ({encoding}): {e}")
+
+    lector = csv.reader(io.StringIO(texto), delimiter=separador)
+    filas = list(lector)
+    filas = filas[filas_saltar:] if filas_saltar > 0 else filas
+
+    # 3) Helpers (mismos criterios que el importador)
+    def celda(fila, idx):
+        return (fila[idx].strip() if 0 <= idx < len(fila) else "")
+
+    def norm_nombre(s):
+        return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    def ean_valido(s):
+        s = (s or "").strip()
+        if not s or "e+" in s.lower():
+            return None
+        return s if re.fullmatch(r"\d{12,13}", s) else None
+
+    # 4) Mapa nombre_normalizado -> EAN (desde el CSV). Primera aparición gana.
+    ean_por_nombre = {}
+    for fila in filas:
+        n = norm_nombre(celda(fila, col_nombre))
+        ean = ean_valido(celda(fila, col_ean))
+        if n and ean:
+            ean_por_nombre.setdefault(n, ean)
+
+    # 5) Productos del comercio (para detectar los que están sin EAN)
+    existentes = db.supabase.table("producto")\
+        .select("id_prod, nombre_prod, ean_prod")\
+        .ilike("comercio_prod", nombre_comer)\
+        .eq("activo_prod", True).limit(5000).execute()
+
+    actualizados = 0
+    sin_match = 0
+    ya_tenian = 0
+    ean_repetido = 0
+    sin_ean_total = 0
+    errores = []
+    plan_cambios = []            # para dry_run: qué se asignaría
+    eans_ya_asignados = set()    # no dar el mismo EAN a dos productos
+
+    for p in (existentes.data or []):
+        pid = p["id_prod"]
+        ean_actual = (p.get("ean_prod") or "").strip()
+        if ean_actual:
+            ya_tenian += 1
+            continue
+
+        sin_ean_total += 1
+        n = norm_nombre(p.get("nombre_prod"))
+        ean = ean_por_nombre.get(n)
+
+        if not ean:
+            sin_match += 1
+            continue
+        if ean in eans_ya_asignados:
+            ean_repetido += 1
+            continue
+
+        eans_ya_asignados.add(ean)
+        plan_cambios.append({
+            "id_prod": pid,
+            "nombre_prod": p.get("nombre_prod"),
+            "ean_asignado": ean
+        })
+
+        if not dry_run:
+            try:
+                db.supabase.table("producto")\
+                    .update({"ean_prod": ean})\
+                    .eq("id_prod", pid).execute()
+                actualizados += 1
+            except Exception as e:
+                errores.append({"id_prod": pid, "error": str(e)})
+
+    return {
+        "comercio": nombre_comer,
+        "dry_run": dry_run,
+        "productos_sin_ean": sin_ean_total,
+        "eans_disponibles_en_csv": len(ean_por_nombre),
+        # en dry_run informa cuántos SE ASIGNARÍAN; en real, cuántos se aplicaron
+        "backfilleados": (len(plan_cambios) if dry_run else actualizados),
+        "sin_match_en_csv": sin_match,
+        "ean_repetido_omitido": ean_repetido,
+        "ya_tenian_ean": ya_tenian,
+        "errores": len(errores),
+        "muestra_cambios": plan_cambios[:40],
+        "detalle_errores": errores[:20],
+    }
 
 if __name__ == "__main__":
     import uvicorn
