@@ -30,6 +30,16 @@
         </button>
       </div>
 
+      <!-- Chip de filtro de comercio activo -->
+      <div v-if="comercioActivo" class="categoria-chip animate-fade-in-up">
+        <span>Comercio: <strong>{{ comercioActivo }}</strong></span>
+        <button class="categoria-chip-clear" @click="seleccionarComercio(comercioActivo)" aria-label="Quitar filtro de comercio">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+
       <!-- BARRA DE BÚSQUEDA -->
       <div class="search-wrapper animate-fade-in-up stagger-1">
         <div class="search-bar" :class="{ 'search-focused': searchFocused, 'search-has-value': searchQueryTrim.length > 0 }">
@@ -55,7 +65,51 @@
               <path d="m6 6 12 12"/>
             </svg>
           </button>
+          <button class="search-scan" @click="escanerAbierto = true" aria-label="Escanear código de barras">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+            </svg>
+          </button>
         </div>
+
+        <!-- SELECTOR DE COMERCIO -->
+        <div class="comercio-filter">
+          <button
+            class="comercio-filter-btn"
+            :class="{ active: !!comercioActivo }"
+            @click="comercioMenuOpen = !comercioMenuOpen"
+            aria-label="Filtrar por comercio"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
+            </svg>
+            <span>{{ comercioActivo || 'Comercio' }}</span>
+          </button>
+
+          <div v-if="comercioMenuOpen" class="comercio-dropdown-overlay" @click="comercioMenuOpen = false" />
+          <div v-if="comercioMenuOpen" class="comercio-dropdown">
+            <button
+              v-for="c in comercios"
+              :key="c.id_comer"
+              class="comercio-dropdown-item"
+              :class="{ active: comercioActivo === c.nombre_comer }"
+              @click="seleccionarComercio(c.nombre_comer)"
+            >
+              {{ c.nombre_comer }}
+            </button>
+            <p v-if="comercios.length === 0" class="comercio-dropdown-empty">No hay comercios disponibles</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aviso cuando un código escaneado no da resultados -->
+      <div v-if="escanerMsg" class="scan-msg animate-fade-in-up">
+        <span>{{ escanerMsg }}</span>
+        <button class="scan-msg-close" @click="escanerMsg = ''" aria-label="Cerrar aviso">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
       </div>
 
       <!-- RESULTADOS -->
@@ -178,6 +232,13 @@
       </div>
     </main>
 
+        <EscanerBarras
+      :abierto="escanerAbierto"
+      titulo="Escaneá un producto"
+      @detectado="onEanEscaneado"
+      @cerrar="escanerAbierto = false"
+    />
+
     <!-- BARRA DE COMPARACIÓN FLOTANTE -->
     <Transition name="slide-up">
       <div v-if="comparacion.length > 0" class="compare-float">
@@ -209,6 +270,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRuntimeConfig, navigateTo } from '#app'
 import ProductRow from '~/components/ProductRow.vue'
+import EscanerBarras from '~/components/EscanerBarras.vue'
 
 // ─── Interfaces ───
 interface Producto {
@@ -238,6 +300,11 @@ interface ComparacionItem extends Producto {
   cantidad: number
 }
 
+interface Comercio {
+  id_comer: string
+  nombre_comer: string
+}
+
 // ─── Config ───
 const config = useRuntimeConfig()
 const route = useRoute()
@@ -251,9 +318,17 @@ const searchQuery = ref('')
 const searchQueryTrim = computed(() => searchQuery.value.trim())
 const searchFocused = ref(false)
 const searchInputRef = ref<HTMLInputElement>()
+// Escáner de código de barras
+const escanerAbierto = ref(false)
+const escanerMsg = ref('')  // mensaje cuando un EAN escaneado no da resultados
 
 // Categoría activa (llega por query param desde el dashboard, ej: ?categoria=Lacteos)
 const categoriaActiva = ref('')
+
+// Filtro por comercio
+const comercios = ref<Comercio[]>([])
+const comercioActivo = ref('')
+const comercioMenuOpen = ref(false)
 
 // ─── Constantes ───
 const DEBOUNCE_MS = 450
@@ -381,12 +456,36 @@ watch(searchQuery, (newVal) => {
 })
 
 // ─── Métodos ───
+async function cargarComercios() {
+  try {
+    const res = await api<{ count: number; results: Comercio[] }>('/comercios')
+    comercios.value = res.results || []
+  } catch (err) {
+    console.error('Error cargando comercios:', err)
+  }
+}
+
+function seleccionarComercio(nombreComer: string) {
+  comercioActivo.value = comercioActivo.value === nombreComer ? '' : nombreComer
+  comercioMenuOpen.value = false
+  // Re-disparar la carga vigente según el modo actual (búsqueda / categoría / todos)
+  if (searchQueryTrim.value.length >= minChars) {
+    fetchSearchResults(searchQueryTrim.value)
+  } else if (categoriaActiva.value) {
+    cargarPorCategoria(categoriaActiva.value)
+  } else {
+    cargarTodosLosProductos()
+  }
+}
+
 async function fetchSearchResults(query: string) {
   loading.value = true
   try {
-    const res = await api<{ count: number; query: string; results: Producto[] }>(
-      `/products/search?q=${encodeURIComponent(query)}&limit=50`
-    )
+    let endpoint = `/products/search?q=${encodeURIComponent(query)}&limit=50`
+    if (comercioActivo.value) {
+      endpoint += `&comercio=${encodeURIComponent(comercioActivo.value)}`
+    }
+    const res = await api<{ count: number; query: string; results: Producto[] }>(endpoint)
     console.log('Resultados búsqueda:', res)
     productos.value = res.results || []
   } catch (err) {
@@ -400,7 +499,11 @@ async function fetchSearchResults(query: string) {
 async function cargarTodosLosProductos() {
   loading.value = true
   try {
-    const res = await api<{ count: number; results: Producto[] }>('/products?limit=100')
+    let endpoint = '/products?limit=100'
+    if (comercioActivo.value) {
+      endpoint += `&comercio=${encodeURIComponent(comercioActivo.value)}`
+    }
+    const res = await api<{ count: number; results: Producto[] }>(endpoint)
     productos.value = res.results || []
   } catch (err) {
     console.error('Error cargando productos:', err)
@@ -422,7 +525,11 @@ function normalizarTexto(s: string): string {
 async function cargarPorCategoria(categoria: string) {
   loading.value = true
   try {
-    const res = await api<{ count: number; results: Producto[] }>('/products?limit=200')
+    let endpoint = '/products?limit=200'
+    if (comercioActivo.value) {
+      endpoint += `&comercio=${encodeURIComponent(comercioActivo.value)}`
+    }
+    const res = await api<{ count: number; results: Producto[] }>(endpoint)
     const todos = res.results || []
     const catNorm = normalizarTexto(categoria)
     productos.value = todos.filter(p => {
@@ -437,7 +544,20 @@ async function cargarPorCategoria(categoria: string) {
   }
 }
 
+// Recibe el EAN leído por el escáner: lo carga en la búsqueda (el watch
+// dispara fetchSearchResults solo) y avisa si no hay resultados.
+async function onEanEscaneado(ean: string) {
+  escanerAbierto.value = false
+  escanerMsg.value = ''
+  searchQuery.value = ean
+  await fetchSearchResults(ean)
+  if (productos.value.length === 0) {
+    escanerMsg.value = `No encontramos ningún producto con el código ${ean}. Probá buscando por nombre.`
+  }
+}
+
 function applySearch() {
+
   if (searchQuery.value.length >= minChars) {
     fetchSearchResults(searchQuery.value)
   }
@@ -519,6 +639,8 @@ onMounted(async () => {
   // Leer query params que llegan desde el dashboard (categorías, búsqueda directa)
   const qCategoria = route.query.categoria as string | undefined
   const qBusqueda = route.query.q as string | undefined
+
+  cargarComercios()
 
   if (qCategoria) {
     categoriaActiva.value = qCategoria
@@ -657,6 +779,110 @@ onMounted(async () => {
 .search-wrapper {
   position: relative;
   z-index: 50;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.search-wrapper .search-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+.comercio-filter {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.comercio-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 100%;
+  padding: 0.875rem 0.9rem;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.comercio-filter-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comercio-filter-btn.active {
+  border-color: var(--border-glow);
+  color: var(--text-primary);
+}
+
+.comercio-dropdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+}
+
+.comercio-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 220px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  z-index: 60;
+}
+
+.comercio-dropdown-item {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comercio-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.comercio-dropdown-item.active {
+  background: var(--border-glow);
+  color: var(--bg-card);
+  font-weight: 600;
+}
+
+.comercio-dropdown-empty {
+  padding: 0.6rem 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .search-bar {
@@ -1040,6 +1266,50 @@ onMounted(async () => {
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
 }
+
+.search-scan {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(232, 196, 160, 0.1);
+  border: 1px solid rgba(232, 196, 160, 0.25);
+  color: var(--accent-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.search-scan:hover {
+  background: rgba(232, 196, 160, 0.18);
+  border-color: rgba(232, 196, 160, 0.4);
+}
+
+.scan-msg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(251, 113, 133, 0.08);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+.scan-msg-close {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.scan-msg-close:hover { color: var(--text-primary); }
 
 @media (max-width: 480px) {
   .page-content { padding: 1rem; gap: 1rem; }
