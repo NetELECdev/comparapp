@@ -58,19 +58,34 @@
         <p class="welcome-sub">{{ welcomeMessage }}</p>
       </section>
 
-      <!-- Banner institucional / propuesta de valor -->
-      <section class="brand-banner" aria-label="ComparApp">
-        <div class="brand-banner-text">
-          <p>Compara precios locales, encuentra las mejores ofertas y crea listas de compra inteligentes para ahorrar tiempo y dinero.</p>
-        </div>
-        <div class="brand-banner-logo">
-          <img
-            src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparAppV2.png"
-            alt="ComparApp"
-            loading="lazy"
-          />
-          <span class="brand-banner-name">ComparApp</span>
-        </div>
+      <!-- Banner institucional / marca -->
+      <section class="brand-banner brand-banner--solo" aria-label="ComparApp">
+        <img
+          class="brand-banner-logo-img"
+          src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparAppV2.png"
+          alt="ComparApp"
+          loading="lazy"
+        />
+        <span class="brand-banner-name">ComparApp</span>
+      </section>
+
+            <!-- Tarjeta protagonista: optimizador de lista -->
+      <section class="optimizer-banner" aria-label="Optimizador de compra">
+        <button class="optimizer-card" @click="irConCuenta('/listas')">
+          <div class="optimizer-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/>
+              <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
+            </svg>
+          </div>
+          <div class="optimizer-text">
+            <span class="optimizer-title">Tu lista, al mejor precio total</span>
+            <span class="optimizer-sub">Armá tu lista de compras y te decimos en qué comercio te sale todo más barato.</span>
+          </div>
+          <svg class="optimizer-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m9 18 6-6-6-6"/>
+          </svg>
+        </button>
       </section>
 
       <!-- Barra de búsqueda -->
@@ -790,6 +805,63 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
+/* ── Banner de marca solo (logo + nombre, sin descripción) ── */
+.brand-banner--solo {
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 18px;
+}
+.brand-banner-logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.brand-banner--solo .brand-banner-name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* ── Tarjeta protagonista del optimizador ── */
+.optimizer-banner { padding: 0 4px; }
+.optimizer-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.18), var(--bg-card));
+  border: 1px solid rgba(52, 211, 153, 0.32);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+.optimizer-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-modal); }
+.optimizer-card:active { transform: scale(0.98); }
+.optimizer-icon {
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.optimizer-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.optimizer-title {
+  font-size: 15px; font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.optimizer-sub {
+  font-size: 12px; font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+.optimizer-arrow { color: #34d399; flex-shrink: 0; }
+
 /* En pantallas angostas, el logo fijo de 128px + el texto + el padding del
    banner no entraban en el ancho real del viewport — se veía cortado en
    el borde derecho de la tarjeta. Lo achicamos progresivamente. */
@@ -806,15 +878,18 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  padding: 14px 16px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-glow);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.2s;
+  box-shadow: var(--shadow-card), 0 0 16px rgba(232, 196, 160, 0.08);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.search-form:has(.search-input:focus) { border-color: var(--border-glow); }
-.search-icon { color: var(--text-muted); flex-shrink: 0; }
+.search-form:has(.search-input:focus) {
+  border-color: var(--accent-gold);
+  box-shadow: var(--shadow-card), 0 0 0 3px rgba(232, 196, 160, 0.12);
+}
+.search-icon { color: var(--accent-gold); flex-shrink: 0; }
 .search-input {
   flex: 1;
   min-width: 0;
