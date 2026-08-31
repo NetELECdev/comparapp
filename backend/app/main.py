@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 import time
 from collections import defaultdict
 import os
+import re
 
 # Cargar variables del .env local (si existe).
 # En producción (Render) no hay .env — las variables vienen del panel de Render.
@@ -602,14 +603,23 @@ def search_products_comparison(
             "Content-Type": "application/json"
         }
 
-        # Buscar productos que coincidan
+        # Buscar productos que coincidan.
+        # Si el término es un EAN (12-13 dígitos, como lo manda el escáner de
+        # código de barras), buscamos por ean_prod exacto. Si no, búsqueda de
+        # texto por nombre/marca/categoría, como siempre.
+        q_limpio = q.strip()
+        es_ean = bool(re.fullmatch(r"\d{12,13}", q_limpio))
+
         url = f"{rest_url}/producto"
         params = {
             "select": "*",
             "activo_prod": "eq.true",
-            "or": f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*)",
             "limit": limit
         }
+        if es_ean:
+            params["ean_prod"] = f"eq.{q_limpio}"
+        else:
+            params["or"] = f"(nombre_prod.ilike.*{q}*,marca_prod.ilike.*{q}*,cate_prod.ilike.*{q}*)"
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
 
