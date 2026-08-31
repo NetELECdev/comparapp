@@ -51,7 +51,7 @@
         <source :src="videoSrc" type="video/mp4" />
       </video>
 
-      <button class="skip-btn" @click="goToLogin">
+      <button class="skip-btn" @click="entrar">
         Saltar
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 12h14"/>
@@ -77,7 +77,7 @@
       </div>
       <h2 class="fallback-title">ComparApp</h2>
       <p class="fallback-subtitle">Tu plataforma de ahorro inteligente</p>
-      <button class="btn-start" @click="goToLogin">
+      <button class="btn-start" @click="entrar">
         Ingresar
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 12h14"/>
@@ -221,7 +221,7 @@ function goToStep3() {
   safetyTimer = setTimeout(() => {
     if (step.value === 3) {
       console.log('⏱️ Safety timeout: video tomó demasiado')
-      goToLogin()
+      entrar()
     }
   }, 10000)
 }
@@ -237,7 +237,7 @@ function onVideoEnd() {
   console.log('✅ Paso 3: Video terminado')
   videoProgress.value = 100
   if (safetyTimer) clearTimeout(safetyTimer)
-  setTimeout(goToLogin, 300)
+  setTimeout(entrar, 300)
 }
 
 function onVideoError(e: Event) {
@@ -258,12 +258,12 @@ function goToStep4() {
 // ============================================
 // NAVEGACIÓN
 // ============================================
-function goToLogin() {
+function entrar() {
   if (step1Timer) clearTimeout(step1Timer)
   if (step2Timer) clearTimeout(step2Timer)
   if (preloadInterval) clearInterval(preloadInterval)
   if (safetyTimer) clearTimeout(safetyTimer)
-  navigateTo('/login')
+  navigateTo('/dashboard')
 }
 
 // ============================================

@@ -8,7 +8,7 @@
     <!-- Header -->
     <header class="dash-header">
       <div class="dash-header-left">
-        <button class="dash-profile-btn" @click="navigateTo('/perfil')" aria-label="Mi perfil">
+        <button class="dash-profile-btn" @click="irConCuenta('/perfil')" aria-label="Mi perfil">
           <span class="dash-profile-avatar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -16,7 +16,7 @@
             </svg>
           </span>
           <span class="dash-profile-info">
-            <span class="dash-profile-name">{{ user?.nombre_completo?.split(' ')[0] || 'Mi perfil' }}</span>
+            <span class="dash-profile-name">{{ user?.nombre_completo?.split(' ')[0] || 'Iniciar sesión' }}</span>
             <button class="dash-location-btn" @click.stop="solicitarUbicacion" aria-label="Tu ubicación">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/>
@@ -39,7 +39,7 @@
             <path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
           </svg>
         </button>
-        <button class="dash-notif" aria-label="Notificaciones" @click="navigateTo('/alertas')">
+        <button class="dash-notif" aria-label="Notificaciones" @click="irConCuenta('/alertas')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
             <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
@@ -94,7 +94,7 @@
         v-if="!loadingAlertas && alertasActivas.length > 0"
         class="alerts-banner"
         aria-label="Alertas de precio activas"
-        @click="navigateTo('/alertas')"
+        @click="irConCuenta('/alertas')"
       >
         <div class="alerts-banner-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -141,7 +141,7 @@
 
       <!-- 3 mini-cards: Alertas / Favoritos / Historial -->
       <section class="mini-cards" aria-label="Tu actividad">
-        <button class="mini-card mini-card--alertas" @click="navigateTo('/alertas')">
+        <button class="mini-card mini-card--alertas" @click="irConCuenta('/alertas')">
           <div class="mini-card-content">
             <span class="mini-card-num">{{ alertasActivas.length }}</span>
             <span class="mini-card-label">{{ alertasActivas.length === 1 ? 'Alerta activa' : 'Alertas activas' }}</span>
@@ -449,6 +449,12 @@ function irABusqueda() {
   const q = busquedaDash.value.trim()
   // NOTA: /productos/lista no existe como ruta (404) — la página real es /productos
   navigateTo(q ? `/productos?q=${encodeURIComponent(q)}` : '/productos')
+}
+
+// Acciones que requieren cuenta (perfil, alertas): si hay sesión va al
+// destino; si es invitado lo mandamos a login (evita páginas vacías).
+function irConCuenta(destino: string) {
+  navigateTo(user.value ? destino : '/login')
 }
 
 // Click en una tarjeta de "Para vos" (oferta, destacado o búsqueda reciente)
