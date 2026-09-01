@@ -1,5 +1,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
+  modules: ['@vite-pwa/nuxt'],
   routeRules: {
     '/': { redirect: '/intro' }
   },
@@ -68,6 +69,37 @@ export default defineNuxtConfig({
       } catch (e) {
         console.warn('[prerender] no se pudieron traer los comercios:', e?.message || e)
       }
+    }
+  },
+  pwa: {
+    registerType: 'autoUpdate',
+    manifest: {
+      name: 'ComparApp - Compara y Ahorra',
+      short_name: 'ComparApp',
+      description: 'Compará precios de tus comercios locales y ahorrá en cada compra.',
+      lang: 'es-AR',
+      theme_color: '#182E1B',
+      background_color: '#182E1B',
+      display: 'standalone',
+      orientation: 'portrait',
+      start_url: '/dashboard',
+      icons: [
+        { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/pwa-maskable-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+        { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+      ]
+    },
+    workbox: {
+      navigateFallback: undefined,
+      globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}']
+    },
+    client: {
+      installPrompt: true
+    },
+    devOptions: {
+      enabled: true,
+      type: 'module'
     }
   },
   devtools: { enabled: true }
