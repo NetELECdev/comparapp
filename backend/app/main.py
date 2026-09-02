@@ -3387,7 +3387,7 @@ async def importar_productos(
     cupo_restante = (LIMITE_PRODUCTOS_PLAN_FREE - cant_actual) if aplicar_limite else None
 
     # 5) Recorrer y ejecutar
-    creados = actualizados = omitidos = duplicados = omitidos_por_plan = 0
+    creados = actualizados = omitidos = duplicados = omitidos_por_plan = omitidos_sin_ean = 0
     por_rubro = {}
     errores = []
     creados_ean = set()      # EANs ya creados en ESTE archivo (evita duplicar)
@@ -3467,6 +3467,7 @@ async def importar_productos(
         "actualizados": actualizados,
         "omitidos": omitidos,
         "omitidos_por_plan": omitidos_por_plan,
+        "omitidos_sin_ean": omitidos_sin_ean,
         "duplicados": duplicados,
         "errores": len(errores),
         "limite_plan_free": LIMITE_PRODUCTOS_PLAN_FREE if aplicar_limite else None,
