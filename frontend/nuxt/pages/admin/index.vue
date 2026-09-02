@@ -604,7 +604,31 @@
               </div>
               <div class="form-group full">
                 <label>Imagen URL</label>
-                <input v-model="formProducto.imagen_prod" placeholder="https://..." />
+                <div class="imagen-field-row">
+                  <input v-model="formProducto.imagen_prod" placeholder="https://..." />
+                  <button type="button" class="btn-secondary btn-imagen-buscar" @click="buscarImagenesDeOtrosComercios">
+                    Buscar en otros comercios
+                  </button>
+                </div>
+                <div v-if="imagenPickerOpen" class="imagen-picker">
+                  <div v-if="imagenPickerLoading" class="imagen-picker-loading">Buscando...</div>
+                  <template v-else>
+                    <div v-if="imagenOpciones.length > 0" class="imagen-picker-grid">
+                      <button
+                        v-for="opt in imagenOpciones"
+                        :key="opt.id_prod"
+                        type="button"
+                        class="imagen-picker-item"
+                        @click="elegirImagen(opt.imagen_prod)"
+                      >
+                        <img :src="opt.imagen_prod" :alt="opt.marca_prod" />
+                        <span>{{ opt.comercio_prod }}</span>
+                      </button>
+                    </div>
+                    <p v-else class="imagen-picker-empty">Sin coincidencias con imagen en otros comercios</p>
+                    <button type="button" class="imagen-picker-close" @click="cerrarImagenPicker">Cerrar</button>
+                  </template>
+                </div>
               </div>
               <div class="form-group">
                 <label class="checkbox-label">
@@ -614,6 +638,15 @@
               </div>
               <div class="form-actions full">
                 <button type="button" class="btn-secondary" @click="closeModalProducto">Cancelar</button>
+                <button
+                  v-if="editingProductoId"
+                  type="button"
+                  class="btn-secondary btn-guardar-nuevo"
+                  :disabled="saving"
+                  @click="saveProductoComoNuevo"
+                >
+                  Guardar como nuevo
+                </button>
                 <button type="submit" class="btn-primary" :disabled="saving">
                   {{ saving ? 'Guardando...' : (editingProductoId ? 'Actualizar' : 'Crear') }}
                 </button>
@@ -772,6 +805,23 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRuntimeConfig, navigateTo } from '#app'
+
+// ─── Normalización de texto (nombres de producto) ──────────────
+// Convierte "ACEITE DE OLIVA" o "aceite de oliva" a "Aceite de Oliva",
+// dejando en minúscula los conectores salvo que sean la primera palabra.
+const CONECTORES_MINUSCULA = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'con', 'a', 'para', 'sin', 'x'])
+
+function toTitleCaseEs(texto: string | undefined | null): string {
+  if (!texto) return ''
+  const palabras = texto.trim().toLowerCase().split(/\s+/)
+  return palabras
+    .map((palabra, i) => {
+      if (!palabra) return palabra
+      if (i > 0 && CONECTORES_MINUSCULA.has(palabra)) return palabra
+      return palabra.charAt(0).toUpperCase() + palabra.slice(1)
+    })
+    .join(' ')
+}
 
 // ─── INTERFACES ───────────────────────────────────────────────
 
@@ -1307,6 +1357,8 @@ function closeModalProducto() {
   modalProductoOpen.value = false
   editingProductoId.value = null
   nuevaCategoria.value = ''
+  imagenPickerOpen.value = false
+  imagenOpciones.value = []
 }
 
 function editProducto(p: Producto) {
@@ -1315,26 +1367,75 @@ function editProducto(p: Producto) {
   modalProductoOpen.value = true
 }
 
+// ─── Reutilizar imagen de otro comercio ────────────────────────
+const imagenPickerOpen = ref(false)
+const imagenPickerLoading = ref(false)
+const imagenOpciones = ref<{ id_prod: string; comercio_prod: string; imagen_prod: string; marca_prod: string }[]>([])
+
+async function buscarImagenesDeOtrosComercios() {
+  const nombre = formProducto.value.nombre_prod?.trim()
+  if (!nombre) {
+    showToast('Escribí primero el nombre del producto', 'error')
+    return
+  }
+  imagenPickerLoading.value = true
+  imagenPickerOpen.value = true
+  try {
+    const params = new URLSearchParams({ nombre })
+    if (editingProductoId.value) params.set('exclude_id', editingProductoId.value)
+    const res = await $fetch<{ count: number; results: typeof imagenOpciones.value }>(
+      `${config.public.apiBase}/products/images-by-name?${params.toString()}`
+    )
+    imagenOpciones.value = res.results || []
+    if (imagenOpciones.value.length === 0) {
+      showToast('No hay imágenes cargadas para ese nombre en otros comercios', 'error')
+    }
+  } catch (err: any) {
+    showToast('Error buscando imágenes', 'error')
+    imagenOpciones.value = []
+  } finally {
+    imagenPickerLoading.value = false
+  }
+}
+
+function elegirImagen(url: string) {
+  formProducto.value.imagen_prod = url
+  imagenPickerOpen.value = false
+  showToast('Imagen aplicada — recordá guardar el producto')
+}
+
+function cerrarImagenPicker() {
+  imagenPickerOpen.value = false
+}
+
+function buildPayloadProducto(): Record<string, any> {
+  return {
+    nombre_prod: toTitleCaseEs(formProducto.value.nombre_prod),
+    cate_prod: formProducto.value.cate_prod?.trim(),
+    marca_prod: toTitleCaseEs(formProducto.value.marca_prod),
+    precio_prod: String(formProducto.value.precio_prod || 0),
+    cantidad_prod: Number(formProducto.value.cantidad_prod) || 1,
+    unidad_prod: formProducto.value.unidad_prod || 'Unidad',
+    comercio_prod: formProducto.value.comercio_prod?.trim(),
+    describe_prod: formProducto.value.describe_prod?.trim() || null,
+    imagen_prod: formProducto.value.imagen_prod?.trim() || null,
+    activo_prod: !!formProducto.value.activo_prod,
+  }
+}
+
+function validarPayloadProducto(payload: Record<string, any>): boolean {
+  if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.comercio_prod) {
+    showToast('Completá todos los campos requeridos (*)', 'error')
+    return false
+  }
+  return true
+}
+
 async function saveProducto() {
   saving.value = true
   try {
-    const payload: Record<string, any> = {
-      nombre_prod: formProducto.value.nombre_prod?.trim(),
-      cate_prod: formProducto.value.cate_prod?.trim(),
-      marca_prod: formProducto.value.marca_prod?.trim(),
-      precio_prod: String(formProducto.value.precio_prod || 0),
-      cantidad_prod: Number(formProducto.value.cantidad_prod) || 1,
-      unidad_prod: formProducto.value.unidad_prod || 'Unidad',
-      comercio_prod: formProducto.value.comercio_prod?.trim(),
-      describe_prod: formProducto.value.describe_prod?.trim() || null,
-      imagen_prod: formProducto.value.imagen_prod?.trim() || null,
-      activo_prod: !!formProducto.value.activo_prod,
-    }
-    if (!payload.nombre_prod || !payload.cate_prod || !payload.marca_prod || !payload.precio_prod || !payload.comercio_prod) {
-      showToast('Completá todos los campos requeridos (*)', 'error')
-      saving.value = false
-      return
-    }
+    const payload = buildPayloadProducto()
+    if (!validarPayloadProducto(payload)) { saving.value = false; return }
     if (editingProductoId.value) {
       await $fetch(`${config.public.apiBase}/products/${editingProductoId.value}`, {
         method: 'PUT',
@@ -1357,6 +1458,30 @@ async function saveProducto() {
     closeModalProducto()
   } catch (err: any) {
     showToast(err?.data?.detail || err?.message || 'Error al guardar producto', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// Crea un producto NUEVO a partir de los datos editados en el formulario,
+// sin tocar el producto original que se estaba editando. Útil para replicar
+// un producto en otro comercio (o con otro precio) manteniendo el original.
+async function saveProductoComoNuevo() {
+  saving.value = true
+  try {
+    const payload = buildPayloadProducto()
+    if (!validarPayloadProducto(payload)) { saving.value = false; return }
+    const res = await $fetch<{ data: Producto }>(`${config.public.apiBase}/products`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: payload
+    })
+    if (res.data) productos.value.unshift(res.data)
+    else await loadData()
+    showToast('Producto nuevo creado (el original no se modificó)')
+    closeModalProducto()
+  } catch (err: any) {
+    showToast(err?.data?.detail || err?.message || 'Error al crear el producto nuevo', 'error')
   } finally {
     saving.value = false
   }
@@ -1853,6 +1978,72 @@ onMounted(() => {
 .oferta-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.imagen-field-row { display: flex; gap: 0.5rem; align-items: center; }
+.imagen-field-row input { flex: 1; min-width: 0; }
+.btn-imagen-buscar { flex-shrink: 0; padding: 0.625rem 0.75rem; font-size: 0.78rem; white-space: nowrap; }
+.btn-guardar-nuevo { border-color: rgba(167,139,250,0.3); color: #c4b5fd; }
+
+.imagen-picker {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.imagen-picker-loading, .imagen-picker-empty {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 0.5rem 0;
+  margin: 0;
+}
+.imagen-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.imagen-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.imagen-picker-item:hover { border-color: var(--border-glow); }
+.imagen-picker-item img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+}
+.imagen-picker-item span {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.imagen-picker-close {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.4rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
 .form-hint { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; font-style: italic; line-height: 1.4; }
 .form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
 .form-group input, .form-group select, .form-group textarea {
