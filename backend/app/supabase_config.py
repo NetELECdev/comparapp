@@ -15,9 +15,13 @@ class SupabaseConfig:
     """Configuración centralizada para Supabase"""
    
     # Estas credenciales están en el Dashboard de Supabase > Settings > API
-    SUPABASE_URL = "https://fbsugjqjbltvvyywfsal.supabase.co"  
-    SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZic3VnanFqYmx0dnZ5eXdmc2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTc5MDAsImV4cCI6MjA2MDMzMzkwMH0.WGPCnfur8MVDzW22WGF3n2K0Ai1xnVh0t0sK0MbYwoc"
-    SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZic3VnanFqYmx0dnZ5eXdmc2FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDc1NzkwMCwiZXhwIjoyMDYwMzMzOTAwfQ.S3bp-R4dvgF_z3JfoWNBx0S3EhjUtlZhCBHosclgjEY"
+    SUPABASE_URL = "https://fbsugjqjbltvvyywfsal.supabase.co"
+    # Las claves NUNCA van en el código: se leen del .env (local) o de las
+    # variables de entorno de Render. Aceptan formato nuevo (sb_...) o legacy (eyJ...).
+    SUPABASE_ANON_KEY = ""
+    SUPABASE_SERVICE_KEY = ""
+    _PREFIJOS_PUBLICA = ("sb_publishable_", "eyJ")
+    _PREFIJOS_SECRETA = ("sb_secret_", "eyJ")
    
     # Configuraciones adicionales
     TIMEOUT = 30  # Timeout para requests
@@ -61,7 +65,7 @@ class SupabaseConfig:
     def is_configured(self) -> bool:
         """Verifica si Supabase está configurado correctamente"""
         try:
-            return bool(self.url and self.key and self.key.startswith('eyJ'))
+            return bool(self.url and self.key and self.key.startswith(self._PREFIJOS_PUBLICA))
         except:
             return False
     
@@ -81,7 +85,7 @@ class SupabaseConfig:
     def get_anon_key(cls) -> str:
         """Obtiene la clave anónima de Supabase"""
         key = os.getenv('SUPABASE_ANON_KEY', cls.SUPABASE_ANON_KEY)
-        if not key or not key.startswith('eyJ'):
+        if not key or not key.startswith(cls._PREFIJOS_PUBLICA):
             raise ValueError(
                 "SUPABASE_ANON_KEY no está configurada correctamente. "
                 "Ve al Dashboard de Supabase > Settings > API y copia tu anon/public key real."
@@ -106,8 +110,12 @@ class SupabaseConfig:
     @classmethod
     def get_service_key(cls) -> str:
         key = os.getenv('SUPABASE_SERVICE_KEY', cls.SUPABASE_SERVICE_KEY)
-        if not key or not key.startswith('eyJ'):
-            return cls.get_anon_key()
+        if not key or not key.startswith(cls._PREFIJOS_SECRETA):
+            # Antes caía en silencio a la anon key y las escrituras fallaban por RLS.
+            raise ValueError(
+                "SUPABASE_SERVICE_KEY falta o tiene formato inválido "
+                "(debe empezar con sb_secret_ o eyJ)."
+            )
         return key
 
 # Configuración de tablas
@@ -152,4 +160,3 @@ class AuthConfig:
 
 # INSTANCIA GLOBAL
 supabase_config = SupabaseConfig()
-
