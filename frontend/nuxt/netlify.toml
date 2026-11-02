@@ -4,3 +4,18 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+
+# / va a /intro (reemplaza la página con meta refresh)
+[[redirects]]
+  from = "/"
+  to = "/intro"
+  status = 302
+  force = true
+
+# Rutas de la app (SPA): servir el shell con 200 en vez del 404.html.
+# Los archivos que existen (vitrinas /c/{id}, assets, manifest) se sirven primero.
+[[redirects]]
+  from = "/*"
+  to = "/200.html"
+  status = 200

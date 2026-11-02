@@ -153,4 +153,23 @@ const isActive = (path: string) => {
 @media (min-width: 480px) {
   .bottom-nav { max-width: 520px; }
 }
+
+
+/* ── Modo claro: barra blanca con íconos legibles.
+      Sin :global — en scoped, Vue descarta lo que sigue al :global(). ── */
+[data-tema="light"] .bottom-nav {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(26, 21, 18, 0.10);
+  box-shadow: 0 6px 24px rgba(26, 21, 18, 0.14);
+}
+[data-tema="light"] .bnav-btn { color: var(--text-secondary); }
+[data-tema="light"] .bnav-btn--active {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+[data-tema="light"] .bnav-btn--center {
+  background: var(--accent-gold-dim);
+  border-color: var(--border-focus);
+  box-shadow: 0 4px 14px rgba(184, 115, 51, 0.25);
+}
 </style>

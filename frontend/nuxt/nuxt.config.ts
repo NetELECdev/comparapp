@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'ComparApp - Compara y Ahorra',
+      htmlAttrs: { lang: 'es' },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
@@ -15,7 +16,8 @@ export default defineNuxtConfig({
         { property: 'og:type', content: 'website' },
         { property: 'og:title', content: 'ComparApp - Compara y Ahorra' },
         { property: 'og:description', content: 'Compará precios de tus comercios y ahorrá en cada compra.' },
-        { name: 'twitter:card', content: 'summary' }
+        { property: 'og:image', content: 'https://compar-app.netlify.app/images/capp3D_elec.png' },
+        { name: 'twitter:card', content: 'summary_large_image' }
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
