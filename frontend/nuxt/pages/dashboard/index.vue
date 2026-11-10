@@ -2,30 +2,25 @@
 <template>
   <div class="dashboard" :class="{ 'is-dark': esDark }">
 
-    <!-- Fondo dinámico -->
-    <DynamicBackground />
 
-    <!-- Header -->
+
+        <!-- Header -->
     <header class="dash-header">
       <div class="dash-header-left">
-        <button class="dash-profile-btn" @click="irConCuenta('/perfil')" aria-label="Mi perfil">
-          <span class="dash-profile-avatar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
+        <NuxtLink to="/dashboard" class="dash-brand" aria-label="ComparApp, inicio">
+          <img class="dash-brand-logo dash-brand-logo--claro" src="/images/logo-comparapp.svg" alt="" width="36" height="36" />
+          <img class="dash-brand-logo dash-brand-logo--oscuro" src="/images/logo-comparapp-oscuro.svg" alt="" width="36" height="36" />
+        </NuxtLink>
+        <div class="dash-brand-info">
+          <h1 class="dash-brand-name">Compar<span class="dash-brand-name-app">App</span></h1>
+          <button class="dash-location-btn" @click="solicitarUbicacion" aria-label="Tu ubicación">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/>
+              <circle cx="12" cy="9" r="2.5"/>
             </svg>
-          </span>
-          <span class="dash-profile-info">
-            <span class="dash-profile-name">{{ user?.nombre_completo?.split(' ')[0] || 'Iniciar sesión' }}</span>
-            <button class="dash-location-btn" @click.stop="solicitarUbicacion" aria-label="Tu ubicación">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/>
-                <circle cx="12" cy="9" r="2.5"/>
-              </svg>
-              <span class="dash-location-text">{{ ubicacionTexto }}</span>
-            </button>
-          </span>
-        </button>
+            <span class="dash-location-text">{{ ubicacionTexto }}</span>
+          </button>
+        </div>
       </div>
       <div class="dash-header-right">
         <ToggleTema />
@@ -44,7 +39,15 @@
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
             <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
           </svg>
-          <span class="dash-notif-dot" aria-hidden="true" />
+          <span v-if="user" class="dash-notif-dot" aria-hidden="true" />
+        </button>
+        <button class="dash-profile-btn" @click="irConCuenta('/perfil')" :aria-label="user ? 'Mi perfil' : 'Iniciar sesión'">
+          <span class="dash-profile-avatar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </span>
         </button>
       </div>
     </header>
@@ -52,22 +55,7 @@
     <!-- Contenido -->
     <main class="dash-main">
 
-      <!-- Bienvenida personalizada -->
-      <section class="welcome-banner" aria-label="Bienvenida">
-        <p class="welcome-title">¡Hola de nuevo, {{ user?.nombre_completo?.split(' ')[0] || 'Usuario' }}! 👋</p>
-        <p class="welcome-sub">{{ welcomeMessage }}</p>
-      </section>
-
-      <!-- Banner institucional / marca -->
-      <section class="brand-banner brand-banner--solo" aria-label="ComparApp">
-        <img
-          class="brand-banner-logo-img"
-          src="https://fbsugjqjbltvvyywfsal.supabase.co/storage/v1/object/public/product-images/comparAppV2.png"
-          alt="ComparApp"
-          loading="lazy"
-        />
-        <span class="brand-banner-name">ComparApp</span>
-      </section>
+  
 
             <!-- Tarjeta protagonista: optimizador de lista -->
       <section class="optimizer-banner" aria-label="Optimizador de compra">
@@ -1423,4 +1411,26 @@ onMounted(async () => {
   background: var(--bg-card-hover);
   animation: shimmer 1.4s ease-in-out infinite;
 }
+
+/* ── Encabezado con marca (nov 2026) ── */
+.dash-header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dash-brand { display: flex; align-items: center; flex-shrink: 0; }
+.dash-brand-logo { width: 36px; height: 36px; display: block; }
+.dash-brand-info { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.dash-brand-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+.dash-brand-name-app { color: #BDE84A; }
+
+/* Variante del logo según tema (data-tema se aplica antes de pintar) */
+.dash-brand-logo--claro { display: none; }
+[data-tema="light"] .dash-brand-logo--claro { display: block; }
+[data-tema="light"] .dash-brand-logo--oscuro { display: none; }
+[data-tema="light"] .dash-brand-name { color: #2B2885; }
+[data-tema="light"] .dash-brand-name-app { color: #6E9A12; }
 </style>
