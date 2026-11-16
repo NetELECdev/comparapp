@@ -17,13 +17,12 @@
 import { computed } from 'vue'
 import { useRoute } from '#app'
 
-const { inicializar } = useTema()
+// useTema() registra inicializar() en onMounted: el tema reactivo se aplica DESPUES
+// de hidratar, asi Vue actualiza clases e iconos sin desfasaje.
+// El color visual ya lo puso el script del <head> en nuxt.config.ts.
+useTema()
 const { } = useBackground()
 const route = useRoute()
-
-if (import.meta.client) {
-  inicializar()
-}
 
 // Rutas donde NO mostrar el bottom nav
 const rutasSinNav = ['/login', '/register', '/intro', '/logout', '/auth/callback', '/forgot-password']
@@ -38,8 +37,14 @@ html, body, #__nuxt {
   height: 100%;
 }
 
+/* Color base por tema: coincide con el final del degradado de DynamicBackground (modo liso) */
+html,
 body {
-  background: #0a0a0f;
+  background: #0F1D11;
+}
+html[data-tema="light"],
+html[data-tema="light"] body {
+  background: #E8ECE4;
 }
 
 /* Espacio inferior para que el contenido no quede tapado por el nav */

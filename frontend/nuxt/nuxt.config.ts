@@ -8,6 +8,13 @@ export default defineNuxtConfig({
     head: {
       title: 'ComparApp - Compara y Ahorra',
       htmlAttrs: { lang: 'es' },
+      // Aplica el tema guardado ANTES de que cargue Vue (evita destello y desfasaje SSG).
+      // Misma logica que useTema.inicializar(): guardado -> sistema -> dark
+      script: [
+        {
+          innerHTML: "(function(){try{var t=localStorage.getItem('comparapp_tema');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.setAttribute('data-tema',t)}catch(e){document.documentElement.setAttribute('data-tema','dark')}})();"
+        }
+      ],
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
@@ -80,8 +87,8 @@ export default defineNuxtConfig({
       short_name: 'ComparApp',
       description: 'Compará precios de tus comercios locales y ahorrá en cada compra.',
       lang: 'es-AR',
-      theme_color: '#182E1B',
-      background_color: '#182E1B',
+      theme_color: '#2B2885',
+      background_color: '#FFFFFF',
       display: 'standalone',
       orientation: 'portrait',
       start_url: '/dashboard',
@@ -90,7 +97,7 @@ export default defineNuxtConfig({
         { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         { src: '/pwa-maskable-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
         { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+
       ]
     },
     workbox: {
@@ -107,3 +114,4 @@ export default defineNuxtConfig({
   },
   devtools: { enabled: true }
 })
+
