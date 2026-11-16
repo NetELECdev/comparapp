@@ -1427,10 +1427,86 @@ onMounted(async () => {
 }
 .dash-brand-name-app { color: #BDE84A; }
 
-/* Variante del logo según tema (data-tema se aplica antes de pintar) */
+/* Encabezado índigo en ambos temas: siempre el logo para fondo oscuro */
 .dash-brand-logo--claro { display: none; }
-[data-tema="light"] .dash-brand-logo--claro { display: block; }
-[data-tema="light"] .dash-brand-logo--oscuro { display: none; }
-[data-tema="light"] .dash-brand-name { color: #2B2885; }
-[data-tema="light"] .dash-brand-name-app { color: #6E9A12; }
+
+
+/* ══ Modo claro saturado (opción E, nov 2026) ══ */
+
+/* Encabezado índigo */
+[data-tema="light"] .dash-header {
+  background: #2B2885;
+  border-bottom-color: transparent;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.25);
+}
+[data-tema="light"] .dash-location-btn,
+[data-tema="light"] .dash-location-text { color: rgba(255, 255, 255, 0.8); }
+
+/* "Tu lista, al mejor precio total": lima sólido */
+[data-tema="light"] .optimizer-card {
+  background: linear-gradient(135deg, #BDE84A, #93C620);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.22);
+}
+[data-tema="light"] .optimizer-title,
+[data-tema="light"] .optimizer-arrow { color: #1E1B5E; }
+[data-tema="light"] .optimizer-sub { color: rgba(30, 27, 94, 0.8); }
+[data-tema="light"] .optimizer-icon {
+  background: rgba(30, 27, 94, 0.12);
+  color: #1E1B5E;
+}
+
+/* Búsqueda: blanca con borde índigo */
+[data-tema="light"] .search-form {
+  background: #FFFFFF;
+  border: 2px solid #2B2885;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.15);
+}
+[data-tema="light"] .search-icon { color: #2B2885; }
+
+/* Tarjetas de color sólido con texto blanco */
+[data-tema="light"] .big-card--comparador,
+[data-tema="light"] .big-card--productos,
+[data-tema="light"] .mini-card--alertas,
+[data-tema="light"] .mini-card--favoritos,
+[data-tema="light"] .mini-card--historial,
+[data-tema="light"] .menu-pin {
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.22);
+}
+[data-tema="light"] .big-card--comparador { background: linear-gradient(135deg, #4440B5, #2B2885); }
+[data-tema="light"] .big-card--productos  { background: linear-gradient(135deg, #6E9A12, #4A6B0A); }
+[data-tema="light"] .mini-card--alertas   { background: linear-gradient(135deg, #F97316, #C2410C); }
+[data-tema="light"] .mini-card--favoritos { background: linear-gradient(135deg, #EC4899, #BE185D); }
+[data-tema="light"] .mini-card--historial { background: linear-gradient(135deg, #3B82F6, #1D4ED8); }
+[data-tema="light"] .menu-pin             { background: linear-gradient(135deg, #334155, #1E293B); }
+
+[data-tema="light"] .big-card--comparador .big-card-label,
+[data-tema="light"] .big-card--productos .big-card-label,
+[data-tema="light"] .mini-card--alertas .mini-card-num,
+[data-tema="light"] .mini-card--favoritos .mini-card-num,
+[data-tema="light"] .mini-card--historial .mini-card-num,
+[data-tema="light"] .menu-pin-label { color: #FFFFFF; }
+
+[data-tema="light"] .big-card--comparador .big-card-title,
+[data-tema="light"] .big-card--productos .big-card-title,
+[data-tema="light"] .big-card--comparador .big-card-sub,
+[data-tema="light"] .big-card--productos .big-card-sub,
+[data-tema="light"] .mini-card--alertas .mini-card-label,
+[data-tema="light"] .mini-card--favoritos .mini-card-label,
+[data-tema="light"] .mini-card--historial .mini-card-label { color: rgba(255, 255, 255, 0.85); }
+
+/* Categorías: fondo blanco (pisa el :style inline) y borde de color más grueso */
+[data-tema="light"] .cat-card {
+  background: #FFFFFF !important;
+  border-width: 2px;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14);
+}
+
+/* Comercios: aro índigo */
+[data-tema="light"] .com-item-avatar { border: 2px solid #2B2885; }
+
+/* Para vos: más sombra y precio en verde de marca */
+[data-tema="light"] .paravos-card { box-shadow: 0 4px 14px rgba(16, 24, 40, 0.16); }
+[data-tema="light"] .paravos-price { color: #4A6B0A; }
 </style>

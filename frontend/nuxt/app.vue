@@ -44,7 +44,7 @@ body {
 }
 html[data-tema="light"],
 html[data-tema="light"] body {
-  background: #E8ECE4;
+  background: #C9CCD9;
 }
 
 /* Espacio inferior para que el contenido no quede tapado por el nav */

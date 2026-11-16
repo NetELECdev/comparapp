@@ -67,14 +67,14 @@
 ══════════════════════════════════════════ */
 [data-tema="light"] {
   /* Fondos — tarjetas solidas sobre gris verdoso (estilo PedidosYa) */
-  --bg-deep:        #E8ECE4;
+  --bg-deep:        #C9CCD9;
   --bg-card:        #FFFFFF;
   --bg-card-hover:  #F7F9F5;
   --bg-input:       #FFFFFF;
   --bg-overlay:     rgba(0, 0, 0, 0.35);
 
   /* Bordes */
-  --border-subtle:  rgba(0, 0, 0, 0.08);
+  --border-subtle:  rgba(0, 0, 0, 0.16);
   --border-glow:    rgba(180, 120, 60, 0.3);
   --border-focus:   rgba(180, 120, 60, 0.5);
 
@@ -100,7 +100,7 @@
   --brand-lime-border: rgba(110, 154, 18, 0.35);
 
   /* Sombras */
-  --shadow-card:    0 1px 2px rgba(16, 24, 16, 0.06), 0 4px 12px rgba(16, 24, 16, 0.06);
+  --shadow-card:    0 1px 3px rgba(16, 24, 40, 0.16), 0 8px 20px rgba(16, 24, 40, 0.12);
   --shadow-modal:   0 16px 48px rgba(0, 0, 0, 0.2);
 
   /* Toggle tema */

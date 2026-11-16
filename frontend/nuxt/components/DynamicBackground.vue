@@ -58,11 +58,11 @@ const overlayStyle = computed(() => {
 .dynamic-bg-liso {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #16181D 0%, #0D0E12 100%);
+  background: #0D0E12;
 }
 /* Tema resuelto por CSS (atributo data-tema en <html>), no por JS: evita el desfasaje de hidratacion SSG */
 [data-tema="light"] .dynamic-bg-liso {
-  background: #E8ECE4;
+  background: #C9CCD9;
 }
 .dynamic-bg-img {
   position: absolute;
