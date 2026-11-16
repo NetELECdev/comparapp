@@ -6,7 +6,7 @@
       <div class="logo-section animate-fade-in-up">
         <div class="logo-wrap">
           <img
-            src="/images/capp3D_elec.png"
+            src="/images/logo-comparapp-oscuro.svg"
             alt="ComparApp"
             class="logo-img"
             @error="showFallback = true"
