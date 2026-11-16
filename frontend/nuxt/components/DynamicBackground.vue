@@ -33,7 +33,7 @@ const urlImagen = computed(() =>
 
 const overlayStyle = computed(() => {
   if (MODO_FONDO === 'atenuado') {
-    return { background: esDark.value ? 'rgba(15,29,17,0.85)' : 'rgba(244,246,241,0.85)' }
+    return { background: esDark.value ? 'rgba(13,14,18,0.85)' : 'rgba(244,246,241,0.85)' }
   }
   if (overlayClass.value.includes('black/40')) return { background: 'rgba(0,0,0,0.40)' }
   if (overlayClass.value.includes('black/60')) return { background: 'rgba(0,0,0,0.60)' }
@@ -58,7 +58,7 @@ const overlayStyle = computed(() => {
 .dynamic-bg-liso {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #182E1B 0%, #0F1D11 100%);
+  background: linear-gradient(180deg, #16181D 0%, #0D0E12 100%);
 }
 /* Tema resuelto por CSS (atributo data-tema en <html>), no por JS: evita el desfasaje de hidratacion SSG */
 [data-tema="light"] .dynamic-bg-liso {

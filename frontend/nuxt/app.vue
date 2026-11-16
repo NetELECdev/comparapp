@@ -40,7 +40,7 @@ html, body, #__nuxt {
 /* Color base por tema: coincide con el final del degradado de DynamicBackground (modo liso) */
 html,
 body {
-  background: #0F1D11;
+  background: #0D0E12;
 }
 html[data-tema="light"],
 html[data-tema="light"] body {
