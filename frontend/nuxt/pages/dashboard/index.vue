@@ -819,8 +819,8 @@ onMounted(async () => {
   gap: 14px;
   width: 100%;
   padding: 16px 18px;
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.18), var(--bg-card));
-  border: 1px solid rgba(52, 211, 153, 0.32);
+  background: linear-gradient(135deg, var(--brand-lime-dim), var(--bg-card));
+  border: 1px solid var(--brand-lime-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
   text-align: left;
@@ -832,8 +832,8 @@ onMounted(async () => {
 .optimizer-icon {
   width: 48px; height: 48px;
   border-radius: 14px;
-  background: rgba(52, 211, 153, 0.2);
-  color: #34d399;
+  background: var(--brand-lime-dim);
+  color: var(--brand-lime);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -848,7 +848,7 @@ onMounted(async () => {
   color: var(--text-secondary);
   line-height: 1.35;
 }
-.optimizer-arrow { color: #34d399; flex-shrink: 0; }
+.optimizer-arrow { color: var(--brand-lime); flex-shrink: 0; }
 
 /* En pantallas angostas, el logo fijo de 128px + el texto + el padding del
    banner no entraban en el ancho real del viewport — se veía cortado en

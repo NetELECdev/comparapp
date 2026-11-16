@@ -44,6 +44,12 @@
   --accent-rose:    #fb7185;
   --accent-violet:  #a78bfa;
 
+  /* Marca (logo nov 2026) */
+  --brand-indigo:      #4440B5;
+  --brand-lime:        #BDE84A;
+  --brand-lime-dim:    rgba(189, 232, 74, 0.16);
+  --brand-lime-border: rgba(189, 232, 74, 0.35);
+
   /* Sombras */
   --shadow-card:    0 4px 24px rgba(0, 0, 0, 0.3);
   --shadow-modal:   0 24px 64px rgba(0, 0, 0, 0.5);
@@ -60,11 +66,11 @@
    TEMA CLARO
 ══════════════════════════════════════════ */
 [data-tema="light"] {
-  /* Fondos */
-  --bg-deep:        #f0ece8;
-  --bg-card:        rgba(255, 255, 255, 0.75);
-  --bg-card-hover:  rgba(255, 255, 255, 0.92);
-  --bg-input:       rgba(255, 255, 255, 0.8);
+  /* Fondos — tarjetas solidas sobre gris verdoso (estilo PedidosYa) */
+  --bg-deep:        #E8ECE4;
+  --bg-card:        #FFFFFF;
+  --bg-card-hover:  #F7F9F5;
+  --bg-input:       #FFFFFF;
   --bg-overlay:     rgba(0, 0, 0, 0.35);
 
   /* Bordes */
@@ -87,8 +93,14 @@
   --accent-rose:    #e11d48;
   --accent-violet:  #7c3aed;
 
+  /* Marca: lima oscuro para que se lea sobre blanco */
+  --brand-indigo:      #2B2885;
+  --brand-lime:        #6E9A12;
+  --brand-lime-dim:    rgba(147, 198, 32, 0.14);
+  --brand-lime-border: rgba(110, 154, 18, 0.35);
+
   /* Sombras */
-  --shadow-card:    0 2px 16px rgba(0, 0, 0, 0.08);
+  --shadow-card:    0 1px 2px rgba(16, 24, 16, 0.06), 0 4px 12px rgba(16, 24, 16, 0.06);
   --shadow-modal:   0 16px 48px rgba(0, 0, 0, 0.2);
 
   /* Toggle tema */
