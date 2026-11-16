@@ -374,3 +374,13 @@
 .app-footer span {
   opacity: 0.6;
 }
+/* Fondo liso: cubrir toda la pantalla aunque la pagina tenga scroll */
+html, body {
+  margin: 0;
+}
+.dynamic-bg-liso {
+  position: fixed !important;
+  inset: 0 !important;
+  height: auto !important;
+  pointer-events: none;
+}
