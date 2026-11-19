@@ -103,11 +103,31 @@ Reglas:
 # Autenticacion (solo admin)
 # ---------------------------------------------------------------------------
 
+from supabase import create_client
+
+_SB_SERVICIO = None
+
+
+def _sb_servicio():
+    """Cliente Supabase propio del router, SIEMPRE con service role.
+    No usa DatabaseManager._shared_supabase: si otro endpoint inicia sesion
+    de un usuario en ese cliente compartido, storage y tablas pasan a usar
+    el JWT del usuario y RLS rechaza (403 'violates row-level security')."""
+    global _SB_SERVICIO
+    if _SB_SERVICIO is None:
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+        if not url or not key:
+            raise HTTPException(status_code=500, detail="Faltan SUPABASE_URL / SUPABASE_SERVICE_KEY")
+        _SB_SERVICIO = create_client(url, key)
+    return _SB_SERVICIO
+
 def _db_admin(authorization: Optional[str]) -> DatabaseManager:
     """Valida el token Bearer y exige rol admin. Devuelve un DatabaseManager con current_user admin."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="No autenticado")
     db = DatabaseManager()
+    db.supabase = _sb_servicio()  # cliente limpio con service role (ver _sb_servicio)
     token = authorization[len("Bearer "):]
     try:
         auth = db.supabase.auth.get_user(token)
