@@ -1121,7 +1121,7 @@ class DatabaseManager:
                 .select("*, producto(nombre_prod)")\
                 .eq("id_prod", product_id)\
                 .eq("activa", True)\
-                .lte("precio_objetivo", nuevo_precio)\
+                .gte("precio_objetivo", nuevo_precio)\
                 .eq("notificada", False)\
                 .execute()
             

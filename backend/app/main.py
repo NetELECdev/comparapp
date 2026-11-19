@@ -120,6 +120,8 @@ app.add_middleware(
 from routers.products_images_router import router as images_router
 app.include_router(images_router)
 
+from routers.ingesta_router import router as ingesta_router
+app.include_router(ingesta_router)
 
 # Instancia usada solo para tareas de arranque/apagado del servidor
 # (ver shutdown_event más abajo). NO se usa para atender requests —
