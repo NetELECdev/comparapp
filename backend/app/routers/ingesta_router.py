@@ -607,7 +607,7 @@ def aprobar_propuesta(
         anterior = prop.get("precio_anterior_leido")
         precio_base = float(anterior) if (es_promo and anterior and float(anterior) > precio_nuevo) else precio_nuevo
         datos = {
-            "nombre_prod": nombre, "marca_prod": marca, "comercio_prod": nombre_comer,
+            "nombre_prod": nombre, "marca_prod": (marca or "").strip() or "Sin marca", "comercio_prod": nombre_comer,  # marca_prod es NOT NULL
             "precio_prod": precio_base, "cantidad_prod": campos["cantidad_prod"],
             "unidad_prod": campos["unidad_prod"], "activo_prod": True,
         }
