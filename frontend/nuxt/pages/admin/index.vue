@@ -17,14 +17,22 @@
             <p class="page-subtitle">Gestión de la plataforma</p>
           </div>
         </div>
-        <button class="refresh-btn" @click="loadData" :class="{ spinning: loading }">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-            <path d="M16 16h5v-5"/>
-          </svg>
-        </button>
+        <div class="header-actions">
+          <button class="refresh-btn ingesta-btn" @click="navigateTo('/admin/ingesta')" title="Ingesta de flyers" aria-label="Ingesta de flyers">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>
+            </svg>
+            <span v-if="pendientesIngesta > 0" class="ingesta-badge">{{ pendientesIngesta }}</span>
+          </button>
+          <button class="refresh-btn" @click="loadData" :class="{ spinning: loading }">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v-5"/>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <!-- STATS -->
@@ -1678,8 +1686,21 @@ async function loadData() {
   }
 }
 
+// ─── Ingesta: contador de propuestas pendientes ──────────────
+const pendientesIngesta = ref(0)
+async function cargarPendientesIngesta() {
+  try {
+    const res = await $fetch<{ propuestas: any[] }>(
+      `${config.public.apiBase}/ingesta/propuestas?estado=pendiente&limit=500`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    )
+    pendientesIngesta.value = res.propuestas?.length || 0
+  } catch { pendientesIngesta.value = 0 }
+}
+
 onMounted(() => {
   loadData()
+  cargarPendientesIngesta()
   cargarComerciosPendientes()
   pedirUbicacionAdmin()
   try {
@@ -1759,6 +1780,14 @@ onMounted(() => {
 .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
 
 /* ─── STATS ─── */
+.header-actions { display: flex; gap: 0.5rem; }
+.ingesta-btn { position: relative; }
+.ingesta-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  background: #a3e635; color: #1a1a1a; font-size: 0.68rem; font-weight: 800;
+}
 .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.875rem; }
 .stat-card { display: flex; align-items: center; gap: 0.875rem; padding: 1.125rem; background: var(--bg-card); backdrop-filter: blur(20px) saturate(180%); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); transition: all 0.3s ease; }
 .stat-card:hover { background: var(--bg-card-hover); border-color: var(--border-glow); transform: translateY(-2px); }
