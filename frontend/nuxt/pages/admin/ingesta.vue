@@ -791,7 +791,7 @@ onMounted(async () => {
 .ing-box p { margin: 0; }
 .ing-spinner {
   width: 26px; height: 26px; border-radius: 50%;
-  border: 3px solid rgba(128,128,128,0.25); border-top-color: var(--brand-lima, #a3e635);
+  border: 3px solid rgba(128,128,128,0.25); border-top-color: var(--brand-lime, #a3e635);
   animation: ing-spin 0.8s linear infinite;
 }
 .spin-sm {
@@ -879,7 +879,7 @@ onMounted(async () => {
 .ing-badge {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--brand-lima, #a3e635); color: #1a1a1a; font-size: 0.68rem; font-weight: 800;
+  background: var(--brand-lime, #a3e635); color: #1a1a1a; font-size: 0.68rem; font-weight: 800;
 }
 
 /* Lote (flyer) */

@@ -40,7 +40,11 @@
           <p class="detalle-marca">{{ producto.marca_prod }}</p>
 
           <div class="detalle-precio-wrap">
-            <span class="detalle-precio">${{ formatPrice(producto.precio_prod) }}</span>
+            <template v-if="ofertaDetalle">
+              <span class="detalle-precio detalle-precio--oferta">${{ formatPrice(ofertaDetalle.precio_oferta) }}</span>
+              <span class="detalle-precio-tachado">${{ formatPrice(producto.precio_prod) }}</span>
+            </template>
+            <span v-else class="detalle-precio">${{ formatPrice(producto.precio_prod) }}</span>
             <span class="detalle-unidad">{{ producto.cantidad_prod }} {{ producto.unidad_prod }}</span>
             <!-- Badge variacion 30d -->
             <span
@@ -53,6 +57,10 @@
               {{ Math.abs(historial.variacion_30d) }}% vs 30d
             </span>
           </div>
+
+          <p v-if="ofertaDetalle" class="detalle-oferta">
+            🔥 Oferta -{{ pctOferta(producto) }}% · válida hasta el {{ finOferta(ofertaDetalle) }}<span v-if="ofertaDetalle.condicion_oferta"> · {{ ofertaDetalle.condicion_oferta }}</span>
+          </p>
 
           <p class="detalle-comercio">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -124,7 +132,8 @@
                 <span v-if="p.id_prod === producto.id_prod" class="sni-badge actual">Actual</span>
               </div>
               <div class="sni-precio-wrap">
-                <span class="sni-precio">${{ formatPrice(p.precio_prod) }}</span>
+                <span class="sni-precio">${{ formatPrice(precioEfectivo(p)) }}</span>
+                <span v-if="ofertaDe(p)" class="sni-oferta">oferta</span>
                 <span v-if="p.pct_vs_min > 0" class="sni-pct">+{{ p.pct_vs_min }}%</span>
               </div>
             </div>
@@ -706,7 +715,7 @@ const preciosMercado = computed(() => {
   if (!mismoNombre.value?.results || mismoNombre.value.results.length === 0) {
     return { min: null, max: null, count: 0 }
   }
-  const precios = mismoNombre.value.results.map(p => Number(p.precio_prod))
+  const precios = mismoNombre.value.results.map(p => precioEfectivo(p))
   return {
     min: Math.min(...precios),
     max: Math.max(...precios),
@@ -768,9 +777,14 @@ function agregarAComparacion() {
   setTimeout(() => { wasAdded.value = false; cantidad.value = 1 }, 2000)
 }
 
+// ─── Oferta vigente ───────────────────────────────────────────
+const { ofertaDe, precioEfectivo, pctOferta, finOferta, cargarOfertas } = useOfertas()
+const ofertaDetalle = computed(() => ofertaDe(producto.value))
+
 // ─── Carga de datos ───────────────────────────────────────────
 
 onMounted(async () => {
+  cargarOfertas()
   const id = route.params.id as string
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   if (!uuidRegex.test(id)) { loading.value = false; return }
@@ -910,6 +924,10 @@ onMounted(async () => {
 .detalle-marca { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
 .detalle-precio-wrap { display: flex; align-items: baseline; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
 .detalle-precio { color: var(--accent-emerald); font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; }
+.detalle-precio--oferta { color: var(--accent-rose); }
+.detalle-precio-tachado { font-size: 1rem; color: var(--text-muted); text-decoration: line-through; }
+.detalle-oferta { margin: 0.35rem 0 0; font-size: 0.85rem; font-weight: 600; color: var(--accent-rose); }
+.sni-oferta { font-size: 0.65rem; font-weight: 700; color: var(--accent-rose); text-transform: uppercase; margin-left: 0.35rem; }
 .detalle-unidad { color: var(--text-muted); font-size: 0.8rem; }
 .detalle-comercio { display: flex; align-items: center; gap: 0.375rem; color: var(--text-secondary); font-size: 0.85rem; margin: 0.5rem 0 0; }
 .detalle-proveedor svg { color: var(--accent-violet); }

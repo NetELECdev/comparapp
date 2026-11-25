@@ -308,6 +308,8 @@ interface Comercio {
 // ─── Config ───
 const config = useRuntimeConfig()
 const route = useRoute()
+// Precio efectivo = precio de oferta vigente si es mas barato que el normal
+const { precioEfectivo, cargarOfertas } = useOfertas()
 
 // ─── Estado ───
 const loading = ref(true)
@@ -362,11 +364,22 @@ const productosAgrupadosPorNombre = computed(() => {
   for (const p of productos.value) {
     const key = p.nombre_prod
     if (!grupos[key]) grupos[key] = []
-    grupos[key].push(p)
+    grupos[key].push({ ...p })
   }
 
+  // Ordena y recalcula mejor/peor precio con el precio efectivo (oferta incluida)
   for (const key in grupos) {
-    grupos[key].sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+    const g = grupos[key].sort((a, b) => precioEfectivo(a) - precioEfectivo(b))
+    if (g.length > 1) {
+      const min = precioEfectivo(g[0])
+      const max = precioEfectivo(g[g.length - 1])
+      for (const p of g as any[]) {
+        const pe = precioEfectivo(p)
+        p.es_mas_barato = pe === min
+        p.es_mas_caro = pe === max && max > min
+        p.pct_vs_min = min > 0 ? Math.round(((pe - min) / min) * 100) : 0
+      }
+    }
   }
 
   return grupos
@@ -378,7 +391,7 @@ const grupoStats = computed(() => {
 
   for (const [nombre, grupo] of Object.entries(productosAgrupadosPorNombre.value)) {
     if (grupo.length > 1) {
-      const precios = grupo.map(p => Number(p.precio_prod))
+      const precios = grupo.map(p => precioEfectivo(p))
       const min = Math.min(...precios)
       const max = Math.max(...precios)
       stats[nombre] = {
@@ -406,9 +419,9 @@ const productosOrdenados = computed(() => {
     case 'nombre':
       return list.sort((a, b) => a.nombre_prod.localeCompare(b.nombre_prod, 'es'))
     case 'precio_asc':
-      return list.sort((a, b) => Number(a.precio_prod) - Number(b.precio_prod))
+      return list.sort((a, b) => precioEfectivo(a) - precioEfectivo(b))
     case 'precio_desc':
-      return list.sort((a, b) => Number(b.precio_prod) - Number(a.precio_prod))
+      return list.sort((a, b) => precioEfectivo(b) - precioEfectivo(a))
     case 'fecha':
       return list.sort((a, b) => {
         const dateA = a.fecha_prod ? new Date(a.fecha_prod).getTime() : 0
@@ -641,6 +654,7 @@ onMounted(async () => {
   const qBusqueda = route.query.q as string | undefined
 
   cargarComercios()
+  cargarOfertas()
 
   if (qCategoria) {
     categoriaActiva.value = qCategoria

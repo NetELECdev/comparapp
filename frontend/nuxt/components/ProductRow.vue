@@ -46,7 +46,12 @@
       <p class="row-marca">{{ product.marca_prod }} · {{ product.comercio_prod }}</p>
 
       <div class="row-bottom">
-        <span class="row-precio">${{ formatPrice(product.precio_prod) }}</span>
+        <template v-if="oferta">
+          <span class="row-precio row-precio--oferta">${{ formatPrice(oferta.precio_oferta) }}</span>
+          <span class="row-precio-tachado">${{ formatPrice(product.precio_prod) }}</span>
+          <span class="badge badge-oferta" :title="oferta.condicion_oferta || ''">-{{ pctOferta(product) }}% · hasta {{ finOferta(oferta) }}</span>
+        </template>
+        <span v-else class="row-precio">${{ formatPrice(product.precio_prod) }}</span>
         <span v-if="product.cantidad_prod" class="row-unidad">{{ product.cantidad_prod }} {{ product.unidad_prod }}</span>
         <span v-if="product.precio_por_unidad" class="row-precio-unidad">
           (${{ formatPrice(product.precio_por_unidad) }}/{{ product.unidad_base_precio }})
@@ -86,10 +91,17 @@ interface ComparacionData {
   totalCompetidores: number
 }
 
-defineProps<{
+import { computed, onMounted } from 'vue'
+
+const props = defineProps<{
   product: any
   comparacion?: ComparacionData
 }>()
+
+// Oferta vigente del producto (se cargan una vez y se comparten)
+const { ofertaDe, pctOferta, finOferta, cargarOfertas } = useOfertas()
+onMounted(() => { cargarOfertas() })
+const oferta = computed(() => ofertaDe(props.product))
 
 defineEmits(['compare', 'click'])
 
@@ -251,6 +263,22 @@ function onImageError(e: Event) {
   font-size: 1rem;
   font-weight: 700;
   color: var(--accent-gold);
+}
+
+.row-precio--oferta {
+  color: var(--accent-rose);
+}
+
+.row-precio-tachado {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.badge-oferta {
+  background: rgba(251, 113, 133, 0.12);
+  border: 1px solid rgba(251, 113, 133, 0.3);
+  color: var(--accent-rose);
 }
 
 .row-unidad {
