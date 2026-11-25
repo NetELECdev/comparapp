@@ -1,5 +1,5 @@
 <template>
-  <div class="login-wrapper">
+  <div class="login-wrapper" data-tema="dark">
     <div class="login-bg-fixed" aria-hidden="true" />
     <main class="login-content">
       <!-- LOGO -->
@@ -278,7 +278,7 @@ function handleError(err: any) {
   --app-shadow-glow: 0 0 20px rgba(232, 196, 160, 0.12);
 }
 .login-bg-fixed {
-  position: fixed; inset: 0; z-index: -1;
+  position: fixed; inset: 0; z-index: 0;   /* -1 quedaba debajo del fondo claro del body */
   background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 196, 160, 0.08), transparent),
               linear-gradient(180deg, #0f0d0a 0%, #0a0a0f 100%);
 }

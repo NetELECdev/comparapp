@@ -1,5 +1,5 @@
 <template>
-  <div class="register-comercio-page">
+  <div class="register-comercio-page" data-tema="dark">
     <div class="auth-bg-fixed" aria-hidden="true" />
 
     <main class="page-content">
