@@ -88,10 +88,11 @@ export default defineNuxtConfig({
       description: 'Compará precios de tus comercios locales y ahorrá en cada compra.',
       lang: 'es-AR',
       theme_color: '#2B2885',
-      background_color: '#FFFFFF',
+      background_color: '#0D0E12',
       display: 'standalone',
       orientation: 'portrait',
-      start_url: '/dashboard',
+      id: '/dashboard',
+      start_url: '/intro',
       icons: [
         { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
