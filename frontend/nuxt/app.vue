@@ -1,5 +1,8 @@
 <template>
   <div class="min-h-screen relative">
+    <!-- Inyecta <link rel="manifest"> en el head: sin esto Chrome no puede instalar la PWA -->
+    <NuxtPwaManifest />
+
     <!-- Fondo dinámico cíclico con transición suave -->
     <DynamicBackground />
 
